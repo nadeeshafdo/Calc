@@ -3,8 +3,8 @@ CFLAGS = -Wall -Wextra
 
 all: calc
 
-calc: main.o
-	$(CC) -o calc main.o
+calc: src/main.o
+	$(CC) -o calc src/main.o
 
 clean:
-	rm -f calc main.o
+	rm -f calc src/main.o
