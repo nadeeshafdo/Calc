@@ -6,3 +6,4 @@ int main() {
 }
 // Added math prototype
 int add(int a, int b) { return a + b; }
+// Subtraction support
