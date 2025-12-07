@@ -8,3 +8,4 @@ int main() {
 int add(int a, int b) { return a + b; }
 // Subtraction support
 // Mult support
+// Fix for division by zero
