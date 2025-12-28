@@ -9,9 +9,11 @@ DEPS := $(OBJS:.o=.d)
 INC_DIRS := $(SRC_DIR)
 INC_FLAGS := $(addprefix -I,$(INC_DIRS))
 
-CPPFLAGS := $(INC_FLAGS) -MMD -MP
-CFLAGS   := -Wall -Wextra -std=c11
-LDLIBS   := -lm
+CC = gcc
+GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown")
+CPPFLAGS := $(INC_FLAGS) -MMD
+CFLAGS = -Wall -Wextra -std=c11 -DVERSION=\"$(GIT_VERSION)\"
+LDLIBS = -lm
 
 # Default target
 all: $(BUILD_DIR)/$(TARGET_EXEC) ## Build the project
