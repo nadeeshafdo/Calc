@@ -15,16 +15,7 @@ int main() {
     while (1) {
         get_input_raw(input);
 
-        if (strcmp(input, "exit") == 0 || strcmp(input, "quit") == 0) {
-            break;
-        }
-
         if (strlen(input) == 0) continue;
-
-        if (strcmp(input, "?") == 0) {
-            print_help();
-            continue;
-        }
         
         if (strncmp(input, "unset ", 6) == 0) {
             char var_name[BUFFER_SIZE];

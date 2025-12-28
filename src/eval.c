@@ -186,36 +186,41 @@ CalcResult solve_math(const char *raw_expr) {
 }
 
 
+
 // Helper to find unknown variables in an equation
-int get_unknown_variables(const char *expr, char *unknown_out) {
+int get_unknown_variables(const char *expr, int max_vars, char var_names[][VAR_NAME_LEN]) {
     char clean_expr[BUFFER_SIZE * 2];
     normalize_expression(clean_expr, expr);
     
     int i = 0;
-    int unknown_count = 0;
-    char found_var[VAR_NAME_LEN] = "";
+    int count = 0;
 
     while (clean_expr[i]) {
         if (isalpha(clean_expr[i])) {
-            char var_name[VAR_NAME_LEN];
+            char name[VAR_NAME_LEN];
             int k = 0;
             while (isalnum(clean_expr[i]) && k < VAR_NAME_LEN - 1) {
-                var_name[k++] = clean_expr[i++];
+                name[k++] = clean_expr[i++];
             }
-            var_name[k] = '\0';
+            name[k] = '\0';
 
             // Ignore functions
-            if (!is_function_name(var_name)) {
+            if (!is_function_name(name)) {
                 // Check if defined
-                if (!is_variable_defined(var_name)) {
-                    // Check if unique
-                    if (strcmp(found_var, var_name) != 0) {
-                        if (strlen(found_var) == 0) {
-                             strcpy(found_var, var_name);
-                             unknown_count++;
+                if (!is_variable_defined(name)) {
+                    // Check if already in list
+                    int found = 0;
+                    for (int j = 0; j < count; j++) {
+                        if (strcmp(var_names[j], name) == 0) {
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        if (count < max_vars) {
+                            strcpy(var_names[count++], name);
                         } else {
-                             // Different unknown variable found
-                             return 2; // Multiple unknowns
+                            return count + 1; // Indicate overflow
                         }
                     }
                 }
@@ -224,15 +229,103 @@ int get_unknown_variables(const char *expr, char *unknown_out) {
             i++;
         }
     }
+    return count;
+}
 
-    if (unknown_count == 1) {
-        strcpy(unknown_out, found_var);
-        return 1;
-    }
-    return unknown_count;
+CalcResult verify_result(const char *expr) {
+     CalcResult res = solve_math(expr);
+     return res;
 }
 
 CalcResult evaluate_expression(const char *expr) {
+    // Check for Simultaneous Equations (separated by ;)
+    char *semi = strchr(expr, ';');
+    if (semi) {
+        // Two equations
+        int len1 = semi - expr;
+        char eq1[BUFFER_SIZE], eq2[BUFFER_SIZE];
+        strncpy(eq1, expr, len1); eq1[len1] = '\0';
+        strcpy(eq2, semi + 1);
+        
+        // Formulate LHS - RHS for both
+        char eq1_comb[BUFFER_SIZE*2], eq2_comb[BUFFER_SIZE*2];
+        char *eq1_eq = strchr(eq1, '=');
+        char *eq2_eq = strchr(eq2, '=');
+        
+        if (!eq1_eq || !eq2_eq) {
+            CalcResult err = {0, 3}; return err; // Syntax Error
+        }
+        
+        *eq1_eq = '\0';
+        snprintf(eq1_comb, sizeof(eq1_comb), "(%s) - (%s)", eq1, eq1_eq + 1);
+        *eq1_eq = '='; // Restore just in case
+        
+        *eq2_eq = '\0';
+        snprintf(eq2_comb, sizeof(eq2_comb), "(%s) - (%s)", eq2, eq2_eq + 1);
+        *eq2_eq = '=';
+
+        // Find unknowns
+        char unknowns[5][VAR_NAME_LEN];
+        char combined_all[BUFFER_SIZE*4];
+        snprintf(combined_all, sizeof(combined_all), "%s + %s", eq1_comb, eq2_comb);
+        
+        int count = get_unknown_variables(combined_all, 5, unknowns);
+        
+        if (count == 2) {
+            // Solve Linear System for unknowns[0] (u) and unknowns[1] (v)
+            char *u = unknowns[0];
+            char *v = unknowns[1];
+            
+            // Model: A*u + B*v + C = 0
+            // C = f(0,0)
+            // A = f(1,0) - C
+            // B = f(0,1) - C
+            
+            double a1, b1, c1, a2, b2, c2;
+            
+            // Eq 1
+            set_variable(u, 0); set_variable(v, 0);
+            c1 = solve_math(eq1_comb).result;
+            set_variable(u, 1); set_variable(v, 0);
+            a1 = solve_math(eq1_comb).result - c1;
+            set_variable(u, 0); set_variable(v, 1);
+            b1 = solve_math(eq1_comb).result - c1;
+            
+            // Eq 2
+            set_variable(u, 0); set_variable(v, 0);
+            c2 = solve_math(eq2_comb).result;
+            set_variable(u, 1); set_variable(v, 0);
+            a2 = solve_math(eq2_comb).result - c2;
+            set_variable(u, 0); set_variable(v, 1);
+            b2 = solve_math(eq2_comb).result - c2;
+            
+            // Solve:
+            // a1*u + b1*v = -c1
+            // a2*u + b2*v = -c2
+            
+            double det = a1*b2 - a2*b1;
+            if (fabs(det) < 1e-9) {
+                 unset_variable(u); unset_variable(v);
+                 CalcResult err = {0, 6}; return err; // No unique solution
+            }
+            
+            double val_u = ((-c1)*b2 - (-c2)*b1) / det;
+            double val_v = (a1*(-c2) - a2*(-c1)) / det;
+            
+            set_variable(u, val_u);
+            set_variable(v, val_v);
+            
+            printf(COLOR_GREEN "Solved %s = %.6g\n" COLOR_RESET, u, val_u);
+            printf(COLOR_GREEN "Solved %s = %.6g\n" COLOR_RESET, v, val_v);
+            
+            CalcResult res = {val_u, 0}; // Return one of them?
+            return res;
+        } else {
+             CalcResult err = {0, 6}; return err; // Need 2 unknowns
+        }
+    }
+
+
     char *eq_sign = strchr(expr, '=');
     
     if (eq_sign) {
@@ -272,44 +365,76 @@ CalcResult evaluate_expression(const char *expr) {
             
             snprintf(combined, sizeof(combined), "(%s) - (%s)", lhs, eq_sign + 1);
             
-            char unknown_var[VAR_NAME_LEN];
-            int unknown_res = get_unknown_variables(combined, unknown_var);
+            char vars[5][VAR_NAME_LEN];
+            int count = get_unknown_variables(combined, 5, vars);
             
-            if (unknown_res == 1) {
-                // Solve for unknown_var
-                // We use linear interpolation: f(x) = ax + b
-                // f(0) = b
-                // f(1) = a + b
-                // f(1) - f(0) = a (slope)
-                // root x = -b / a = -f(0) / (f(1) - f(0))
+            if (count == 1) {
+                char *unknown_var = vars[0];
                 
-                // Save old value if it (unlikely) exists, though `is_variable_defined` said no.
-                // Just in case, to be safe (or if we relax logic later).
-                
+                // Check Linearity/Quadratic content
                 set_variable(unknown_var, 0.0);
-                CalcResult f0 = solve_math(combined);
-                if (f0.error) return f0;
+                double f0 = solve_math(combined).result;
                 
                 set_variable(unknown_var, 1.0);
-                CalcResult f1 = solve_math(combined);
-                if (f1.error) return f1;
+                double f1 = solve_math(combined).result;
                 
-                double slope = f1.result - f0.result;
-                if (fabs(slope) < 1e-9) {
-                     CalcResult err = {0, 6}; return err; // No solution or infinite solutions (slope 0)
+                set_variable(unknown_var, 2.0);
+                double f2 = solve_math(combined).result;
+                
+                double slope1 = f1 - f0;
+                double slope2 = f2 - f1;
+                
+                if (fabs(slope2 - slope1) < 1e-9) {
+                    // Linear: f(x) = ax + b
+                    // b = f0, a = slope1
+                    double a = slope1;
+                    double b = f0;
+                    
+                    if (fabs(a) < 1e-9) {
+                         unset_variable(unknown_var);
+                         // Check b roughly 0
+                         if (fabs(b) < 1e-9) { printf(COLOR_GREEN "True\n" COLOR_RESET); CalcResult r = {0,0}; return r; }
+                         else { CalcResult r = {b, 0}; printf(COLOR_RED "False\n" COLOR_RESET); return r; }
+                    }
+                    
+                    double root = -b / a;
+                    set_variable(unknown_var, root);
+                    printf(COLOR_GREEN "Solved %s = %.6g\n" COLOR_RESET, unknown_var, root);
+                    CalcResult res = {root, 0};
+                    return res;
+                } else {
+                    // Quadratic: Ax^2 + Bx + C = 0
+                    // C = f0
+                    // A + B = f1 - C
+                    // 4A + 2B = f2 - C
+                    double C = f0;
+                    double eq1_rhs = f1 - C;
+                    double eq2_rhs = f2 - C;
+                    
+                    // 2(A+B) = 2A + 2B = 2*eq1_rhs
+                    // (4A+2B) - (2A+2B) = 2A
+                    double A = (eq2_rhs - 2*eq1_rhs) / 2.0;
+                    double B = eq1_rhs - A;
+                    
+                    // Roots
+                    double disc = B*B - 4*A*C;
+                    if (disc < 0) {
+                        unset_variable(unknown_var);
+                        printf(COLOR_RED "No real solutions.\n" COLOR_RESET);
+                         CalcResult err = {0, 6}; return err; 
+                    }
+                    
+                    double r1 = (-B + sqrt(disc)) / (2*A);
+                    double r2 = (-B - sqrt(disc)) / (2*A);
+                    
+                    printf(COLOR_GREEN "Solved %s = %.6g, %.6g\n" COLOR_RESET, unknown_var, r1, r2);
+                    // Use r1
+                    set_variable(unknown_var, r1);
+                    CalcResult res = {r1, 0};
+                    return res;
                 }
                 
-                double root = -f0.result / slope;
-                
-                // Set the result
-                set_variable(unknown_var, root);
-                
-                printf(COLOR_GREEN "Solved %s = %.6g\n" COLOR_RESET, unknown_var, root);
-                
-                CalcResult res = {root, 0};
-                return res;
-                
-            } else if (unknown_res == 0) {
+            } else if (count == 0) {
                 // All vars defined. Check if true/false?
                 CalcResult val = solve_math(combined);
                 if (val.error) return val;

@@ -23,8 +23,8 @@ void enableRawMode() {
     atexit(disableRawMode);
 
     struct termios raw = orig_termios;
-    // Disable ECHO (typing) and ICANON (line buffering)
-    raw.c_lflag &= ~(ECHO | ICANON);
+    // Disable ECHO (typing), ICANON (line buffering), and ISIG (signals)
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
@@ -43,23 +43,24 @@ void add_to_history(const char *cmd) {
 }
 
 void print_banner() {
-    printf(COLOR_BOLD COLOR_CYAN);
-    printf("   ______      __      \n");
-    printf("  / ____/___ _/ /____  \n");
-    printf(" / /   / __ `/ / ___/  \n");
-    printf("/ /___/ /_/ / / /__    \n");
-    printf("\\____/\\__,_/_/\\___/    \n");
-    printf(COLOR_RESET);
-    printf("CalcPro v" VERSION " (c) 2025\n");
-    printf("Type " COLOR_BOLD "'exit'" COLOR_RESET " to quit, " COLOR_BOLD "'?'" COLOR_RESET " for help.\n\n");
+    printf("Calc v" VERSION " (c) 2025 Nadeesha Fernando\n");
+    printf("Type CTRL-C to quit, CTRL-H for help.\n\n");
 }
 
 void print_help() {
-    printf(COLOR_BOLD "--- CLI Calculator (Fixed) ---\n" COLOR_RESET);
-    printf("Math: " COLOR_CYAN "10 + 5" COLOR_RESET ", " COLOR_CYAN "(2)(3)" COLOR_RESET ", " COLOR_CYAN "5x\n" COLOR_RESET);
-    printf("Vars: " COLOR_GREEN "x=10" COLOR_RESET ", " COLOR_GREEN "y=5" COLOR_RESET ", " COLOR_GREEN "x+y\n" COLOR_RESET);
-    printf("Func: " COLOR_CYAN "sin(0)" COLOR_RESET ", " COLOR_CYAN "sqrt(4)" COLOR_RESET "\n");
-    printf(COLOR_BOLD "----------------------------\n" COLOR_RESET);
+    printf("\nGNU-style Calc Help\n");
+    printf("Usage:\n");
+    printf("  make clean        Clean build artifacts\n");
+    printf("  ./calc            Run calculator\n\n");
+    printf("Commands:\n");
+    printf("  CTRL-C            Quit\n");
+    printf("  CTRL-H            Show this help\n");
+    printf("  unset <var>       Unset variable\n\n");
+    printf("Examples:\n");
+    printf("  2 + 2             Arithmetic\n");
+    printf("  x = 10            Assignment\n");
+    printf("  sin(x)            Functions\n");
+    printf("  2x + 5 = 15       Linear Solver\n");
 }
 
 // The custom input function
@@ -76,7 +77,17 @@ void get_input_raw(char *buffer) {
     while (1) {
         if (read(STDIN_FILENO, &c, 1) == -1) break;
 
-        if (c == '\n' || c == '\r') {
+        if (c == 3) { // CTRL-C
+            // exit(0) is clean
+            printf("\n");
+            disableRawMode();
+            exit(0);
+        } else if (c == 8) { // CTRL-H
+            print_help();
+            // Reprint prompt and buffer
+            printf(COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s", buffer);
+            fflush(stdout);
+        } else if (c == '\n' || c == '\r') {
             buffer[len] = '\0';
             printf("\r\n");
             break;

@@ -1,17 +1,18 @@
-# CalcPro
+# Calc
 
-A lightweight, professional command-line calculator written in C.
+A lightweight command-line calculator written in C.
 
 ## Features
-- **Arithmetic**: `+`, `-`, `*`, `/`, `^`, `%`
-- **Math Functions**: `sin`, `cos`, `tan`, `sqrt`, `log`
-- **Variables**: `x=10`, `y=x*2`, `unset x`
-
-- **Equation Solving**: `x+12=15`, `2x=10` (solves for linear unknown)
+- **Variables**: `x=10`, `y=x*2`, chain assign `x=y=z`, `unset x`
+- **Equation Solving**:
+  - Linear: `x+12=15`
+  - Quadratic: `4x^2-5x-12=0`
+  - Simultaneous: `7x+2y=24; 8x+2y=30`
 - **Implicit Multiplication**: `2x`, `(a)(b)`
+- **UI**: GNU-style interface with `Ctrl-C` (quit) and `Ctrl-H` (help).
+- **Line Editing**: Left/Right arrows, Backspace, Insertion.
+- **History**: Up/Down arrows.
 
-- **Line Editing**: Left/Right arrows, Backspace, Insertion
-- **History**: Up/Down arrows to access previous commands
 
 ## Build & Install
 
