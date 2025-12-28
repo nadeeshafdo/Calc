@@ -58,6 +58,16 @@ ctest
 
 
 
+## CI/CD Artifacts
+This project uses GitHub Actions for continuous integration.
+- **Build Artifacts**: on every push to `main` or pull request, the workflow builds the calculator.
+- **Download**: You can download the compiled executable (`calc` for Linux/macOS, `calc.exe` for Windows) from the **Actions** tab in GitHub > select the run > **Artifacts**.
+
+## Versioning
+The project uses dynamic versioning based on git tags.
+- The build system automatically extracts the version using `git describe`.
+- The version string (e.g., `v1.0.0-3-g1a2b3c`) is displayed in the startup banner.
+
 ```text
 calc> 10 + 5
 = 15
