@@ -43,24 +43,25 @@ void add_to_history(const char *cmd) {
 }
 
 void print_banner() {
-    printf("Calc v" VERSION " (c) 2025 Nadeesha Fernando\n");
+    printf("Calc v" VERSION " (c) 2025 nadeeshafdo\n");
     printf("Type CTRL-C to quit, CTRL-H for help.\n\n");
 }
 
 void print_help() {
-    printf("\nGNU-style Calc Help\n");
-    printf("Usage:\n");
-    printf("  make clean        Clean build artifacts\n");
-    printf("  ./calc            Run calculator\n\n");
+    printf("\nCalc Help\n");
     printf("Commands:\n");
     printf("  CTRL-C            Quit\n");
     printf("  CTRL-H            Show this help\n");
-    printf("  unset <var>       Unset variable\n\n");
-    printf("Examples:\n");
-    printf("  2 + 2             Arithmetic\n");
-    printf("  x = 10            Assignment\n");
-    printf("  sin(x)            Functions\n");
-    printf("  2x + 5 = 15       Linear Solver\n");
+    printf("  unset <var>       Unset variable\n");
+    printf("  vars              List all defined variables\n");
+    printf("\nExamples:\n");
+    printf("  2 + 3 * 4         Evaluate basic arithmetic\n");
+    printf("  (10 - 2) / 4      Use parentheses for grouping\n");
+    printf("  x = 42            Assign a value to a variable\n");
+    printf("  x * 2             Use a variable in an expression\n");
+    printf("  unset x           Remove a variable from memory\n");
+    printf("  vars              Show all currently stored variables\n");
+    printf("\n");
 }
 
 // The custom input function
