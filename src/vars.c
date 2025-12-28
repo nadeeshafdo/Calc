@@ -52,3 +52,14 @@ void unset_variable(const char *name) {
         }
     }
 }
+
+void list_variables(void) {
+    if (var_count == 0) {
+        printf(COLOR_RED "No variables defined.\n" COLOR_RESET);
+        return;
+    }
+    printf(COLOR_BOLD "Defined Variables:\n" COLOR_RESET);
+    for (int i = 0; i < var_count; i++) {
+        printf(COLOR_GREEN "  %s" COLOR_RESET " = %.6g\n", variables[i].name, variables[i].value);
+    }
+}

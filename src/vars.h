@@ -12,5 +12,6 @@ void set_variable(char *name, double val);
 int get_variable(char *name, double *val);
 int is_variable_defined(const char *name);
 void unset_variable(const char *name);
+void list_variables(void);
 
 #endif

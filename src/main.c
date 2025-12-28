@@ -17,6 +17,11 @@ int main() {
 
         if (strlen(input) == 0) continue;
         
+        if (strcmp(input, "vars") == 0) {
+            list_variables();
+            continue;
+        }
+
         if (strncmp(input, "unset ", 6) == 0) {
             char var_name[BUFFER_SIZE];
             // Skip "unset " (6 chars) and spaces

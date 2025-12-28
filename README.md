@@ -3,7 +3,8 @@
 A lightweight command-line calculator written in C.
 
 ## Features
-- **Variables**: `x=10`, `y=x*2`, chain assign `x=y=z`, `unset x`
+- **Variables**: `x=10`, `y=x*2`, chain assign `x=y=z`, `unset x`, `vars`
+
 - **Equation Solving**:
   - Linear: `x+12=15`
   - Quadratic: `4x^2-5x-12=0`
