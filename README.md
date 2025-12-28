@@ -28,7 +28,18 @@ make
 sudo make install
 ```
 
+## Building for Windows (Cross-Compilation)
+
+To compile for Windows on Linux (requires `mingw-w64`):
+
+```bash
+make -f Makefile.win
+```
+
+The executable `calc.exe` will be found in the `build-win` directory.
+
 ## Usage
+
 
 ```text
 calc> 10 + 5
