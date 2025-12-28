@@ -266,7 +266,7 @@ CalcResult evaluate_expression(const char *expr) {
 
         // Find unknowns
         char unknowns[5][VAR_NAME_LEN];
-        char combined_all[BUFFER_SIZE*4];
+        char combined_all[BUFFER_SIZE*6];
         snprintf(combined_all, sizeof(combined_all), "%s + %s", eq1_comb, eq2_comb);
         
         int count = get_unknown_variables(combined_all, 5, unknowns);
