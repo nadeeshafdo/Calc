@@ -62,6 +62,7 @@ ctest
 This project uses GitHub Actions for continuous integration.
 - **Build Artifacts**: on every push to `main` or pull request, the workflow builds the calculator.
 - **Download**: You can download the compiled executable (`calc` for Linux/macOS, `calc.exe` for Windows) from the **Actions** tab in GitHub > select the run > **Artifacts**.
+- **Releases**: When a new tag (e.g. `v1.0.0`) is pushed, a GitHub Release is automatically created, and the Linux/Windows binaries are attached to it.
 
 ## Versioning
 The project uses dynamic versioning based on git tags.

@@ -3,7 +3,7 @@
 
 // --- Constants ---
 #ifndef VERSION
-    #define VERSION "1.0.0-dev"
+    #define VERSION "v1.0.0-dev"
 #endif
 
 #define HISTORY_MAX 50

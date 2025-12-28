@@ -68,7 +68,7 @@ void add_to_history(const char *cmd) {
 }
 
 void print_banner() {
-    printf("Calc v" VERSION " (c) 2025 nadeeshafdo\n");
+    printf("Calc " VERSION " (c) 2025 nadeeshafdo\n");
     printf("Type CTRL-C to quit, CTRL-H for help.\n\n");
 }
 
