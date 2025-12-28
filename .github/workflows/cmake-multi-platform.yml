@@ -78,7 +78,7 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: calc-${{ matrix.os }}
+        name: calc-${{ matrix.os }}-${{ matrix.c_compiler }}
         path: ${{ steps.strings.outputs.build-output-dir }}/calc*
 
   release:
@@ -97,6 +97,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/calc-ubuntu-latest/calc
-            artifacts/calc-windows-latest/calc.exe
+            artifacts/calc-ubuntu-latest-gcc/calc
+            artifacts/calc-windows-latest-cl/calc.exe
 
