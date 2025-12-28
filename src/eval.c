@@ -398,7 +398,14 @@ CalcResult evaluate_expression(const char *expr) {
                     }
                     
                     double root = -b / a;
+                    
+                    // Verify solution
                     set_variable(unknown_var, root);
+                    double check = solve_math(combined).result;
+                    if (fabs(check) > 1e-3) { // Relaxed threshold for check
+                         printf(COLOR_RED "Warning: Solution may be inaccurate (Residual: %.6g)\n" COLOR_RESET, check);
+                    }
+                    
                     printf(COLOR_GREEN "Solved %s = %.6g\n" COLOR_RESET, unknown_var, root);
                     CalcResult res = {root, 0};
                     return res;
@@ -426,6 +433,23 @@ CalcResult evaluate_expression(const char *expr) {
                     
                     double r1 = (-B + sqrt(disc)) / (2*A);
                     double r2 = (-B - sqrt(disc)) / (2*A);
+                    
+                    // Verify r1
+                    set_variable(unknown_var, r1);
+                    double check1 = solve_math(combined).result;
+                    
+                    // Verify r2
+                    set_variable(unknown_var, r2);
+                    double check2 = solve_math(combined).result;
+
+                    // Choose best
+                    double best_r = r1;
+                    if (fabs(check2) < fabs(check1)) best_r = r2;
+                    double best_check = (best_r == r1) ? check1 : check2;
+                    
+                    if (fabs(best_check) > 1e-3) {
+                         printf(COLOR_RED "Warning: Solution may be inaccurate (Residual: %.6g)\n" COLOR_RESET, best_check);
+                    }
                     
                     printf(COLOR_GREEN "Solved %s = %.6g, %.6g\n" COLOR_RESET, unknown_var, r1, r2);
                     // Use r1
