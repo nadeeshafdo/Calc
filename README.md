@@ -38,7 +38,24 @@ make -f Makefile.win
 
 The executable `calc.exe` will be found in the `build-win` directory.
 
+## Building with CMake (Cross-Platform)
+
+You can also use CMake to build the project on Linux, Windows, or macOS.
+
+```bash
+mkdir build
+cd build
+cmake ..
+cmake --build .
+```
+
+To run tests (if configured):
+```bash
+ctest
+```
+
 ## Usage
+
 
 
 ```text
