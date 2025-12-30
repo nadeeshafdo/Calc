@@ -8,13 +8,13 @@
 #include <termios.h>
 #include <unistd.h>
 #endif
+#include "defs.h"
+#include "eval.h"
+#include "funcs.h"
+#include "ui.h"
+#include "vars.h"
 #include <ctype.h>
 #include <math.h>
-#include "ui.h"
-#include "defs.h"
-#include "vars.h"
-#include "funcs.h"
-#include "eval.h"
 
 // --- History Storage ---
 static char history[HISTORY_MAX][BUFFER_SIZE];
@@ -314,80 +314,73 @@ void plot_function(const char *func_ref) {
   }
   name[k] = '\0';
 
+  char param[VAR_NAME_LEN];
+
   if (is_user_function_defined(name)) {
     // Use the function's expression
-    char param[VAR_NAME_LEN];
     get_function_expr(name, param, expr);
-    // We need to substitute param with 'x' for plotting if param is not 'x'
-    // Or just set the variable 'param' during plotting loop.
     is_func_name = 1;
     printf(COLOR_CYAN "Plotting function %s(%s) = %s\n" COLOR_RESET, name,
            param, expr);
-
-    // Plotting Config
-    double min_x = -10;
-    double max_x = 10;
-    double min_y = -10;
-    double max_y = 10;
-    int width = 60;
-    int height = 20;
-
-    double debug_val;
-    double old_val_param, old_val_x;
-    int had_param = get_variable(param, &old_val_param);
-    int had_x = get_variable(
-        "x", &old_val_x); // Standardize on 'x' for axis? No, use param.
-
-    for (int row = 0; row < height; row++) {
-      // y goes from max_y to min_y
-      double y = max_y - (row * (max_y - min_y) / (height - 1));
-
-      for (int col = 0; col < width; col++) {
-        double x = min_x + (col * (max_x - min_x) / (width - 1));
-
-        // Evaluate
-        set_variable(param, x);
-        CalcResult res = evaluate_expression(expr);
-
-        // Check if y is close to res.result
-        if (res.error == 0) {
-          double val = res.result;
-          // Threshold for "hit" depends on slope, but simple proximity for now
-          // Or check if previous y was below and this is above?
-          // Simple nearest char check:
-          // The cell covers a range of y.
-          double y_step = (max_y - min_y) / (height - 1);
-          if (fabs(val - y) < y_step / 2.0) {
-            printf("*");
-          } else if (fabs(x) < 0.1 && fabs(y) < 0.1) {
-            printf("+"); // Origin
-          } else if (fabs(x) < 0.1) {
-            printf("|"); // Y-axis
-          } else if (fabs(y) < 0.1) {
-            printf("-"); // X-axis
-          } else {
-            printf(" ");
-          }
-        } else {
-          printf("?");
-        }
-      }
-      printf("\n");
-    }
-
-    // Restore
-    if (had_param)
-      set_variable(param, old_val_param);
-    else
-      unset_variable(param);
-    if (had_x)
-      set_variable("x", old_val_x);
-    else
-      unset_variable("x");
-
   } else {
-    printf(COLOR_RED "Error: Function '%s' not defined. Only plotting named "
-                     "functions is supported currently.\n" COLOR_RESET,
-           name);
+    // Treat as expression with param 'x'
+    strcpy(expr, func_ref);
+    strcpy(param, "x");
+    printf(COLOR_CYAN "Plotting expression %s (param: %s)\n" COLOR_RESET, expr,
+           param);
   }
+
+  // Plotting Config
+  double min_x = -10;
+  double max_x = 10;
+  double min_y = -10;
+  double max_y = 10;
+  int width = 60;
+  int height = 20;
+
+  double old_val_param, old_val_x;
+  int had_param = get_variable(param, &old_val_param);
+  // If param is not 'x', we might need to save 'x' too if we standardized on
+  // it, but here we just use 'param' variable for evaluation.
+
+  for (int row = 0; row < height; row++) {
+    // y goes from max_y to min_y
+    double y = max_y - (row * (max_y - min_y) / (height - 1));
+
+    for (int col = 0; col < width; col++) {
+      double x = min_x + (col * (max_x - min_x) / (width - 1));
+
+      // Evaluate
+      set_variable(param, x);
+      CalcResult res = evaluate_expression(expr);
+
+      // Check if y is close to res.result
+      if (res.error == 0) {
+        double val = res.result;
+        double y_step = (max_y - min_y) / (height - 1);
+        if (fabs(val - y) < y_step / 2.0) {
+          printf("*");
+        } else if (fabs(x) < 0.1 && fabs(y) < 0.1) {
+          printf("+"); // Origin
+        } else if (fabs(x) < 0.1) {
+          printf("|"); // Y-axis
+        } else if (fabs(y) < 0.1) {
+          printf("-"); // X-axis
+        } else {
+          printf(" ");
+        }
+      } else {
+        // If error (e.g. sqrt(-1)), just print space or specific char?
+        // printf("?");
+        printf(" ");
+      }
+    }
+    printf("\n");
+  }
+
+  // Restore
+  if (had_param)
+    set_variable(param, old_val_param);
+  else
+    unset_variable(param);
 }

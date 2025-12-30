@@ -16,6 +16,10 @@ int main() {
   while (1) {
     get_input_raw(input);
 
+    if (strlen(input) > 0) {
+      add_to_history(input);
+    }
+
     // Tokenize by ';'
     char *token = strtok(input, ";");
     while (token != NULL) {
@@ -31,8 +35,6 @@ int main() {
         token = strtok(NULL, ";");
         continue;
       }
-
-      add_to_history(token);
 
       if (strcmp(token, "vars") == 0) {
         list_variables();
@@ -103,12 +105,19 @@ int main() {
           int m = 0;
           p = paren_open + 1;
           while (p < paren_close) {
-            if (!isspace(*p))
+            if (!isspace(*p)) {
+              if (!isalnum(*p))
+                valid = 0; // Only alphanumeric
               param[m++] = *p;
+            }
             p++;
           }
           param[m] = '\0';
           if (m == 0)
+            valid = 0;
+
+          // Check if param starts with digit (invalid var)
+          if (isdigit(param[0]))
             valid = 0;
 
           if (valid) {
