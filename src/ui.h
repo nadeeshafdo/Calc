@@ -8,4 +8,7 @@ void add_to_history(const char *cmd);
 void print_banner();
 void print_help();
 
+// --- Plotting ---
+void plot_function(const char *func_name_or_expr);
+
 #endif

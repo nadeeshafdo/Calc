@@ -29,4 +29,12 @@ typedef struct {
     double value;
 } Variable;
 
+typedef struct {
+    char name[VAR_NAME_LEN];
+    char param[VAR_NAME_LEN];
+    char expr[BUFFER_SIZE];
+} Function;
+
+#define MAX_FUNCS 20
+
 #endif
