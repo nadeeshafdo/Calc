@@ -1,10 +1,14 @@
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "vars.h"
 
 // --- Global Symbol Table ---
-Variable variables[MAX_VARS];
-int var_count = 0;
+Variable variables[MAX_VARS] = {
+    {"pi", 3.14159265358979323846},
+    {"e", 2.71828182845904523536}
+};
+int var_count = 2;
 
 void set_variable(char *name, double val) {
     for (int i = 0; i < var_count; i++) {
