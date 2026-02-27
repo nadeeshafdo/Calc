@@ -83,14 +83,18 @@ void print_help() {
   printf("Commands:\n");
   printf("  CTRL-C            Quit\n");
   printf("  CTRL-H            Show this help\n");
-  printf("  unset <var>       Unset variable\n");
+  printf("  exit, quit        Exit the calculator\n");
+  printf("  unset <var>       Unset variable or function\n");
   printf("  vars              List all defined variables\n");
+  printf("  funcs             List all defined functions\n");
+  printf("  plot(expr)        Plot an expression or function\n");
   printf("\nExamples:\n");
   printf("  2 + 3 * 4         Evaluate basic arithmetic\n");
   printf("  (10 - 2) / 4      Use parentheses for grouping\n");
   printf("  x = 42            Assign a value to a variable\n");
-  printf("  x * 2             Use a variable in an expression\n");
-  printf("  unset x           Remove a variable from memory\n");
+  printf("  f(x) = x^2        Define a function\n");
+  printf("  plot(f)           Plot the function f\n");
+  printf("  plot(sin(x))      Plot an expression\n");
   printf("  vars              Show all currently stored variables\n");
   printf("\n");
 }
@@ -300,7 +304,6 @@ void plot_function(const char *func_ref) {
 
   char expr[BUFFER_SIZE];
   char name[VAR_NAME_LEN];
-  int is_func_name = 0;
 
   // Check if func_ref matches a function name
   // Strip (x) if present
@@ -319,7 +322,6 @@ void plot_function(const char *func_ref) {
   if (is_user_function_defined(name)) {
     // Use the function's expression
     get_function_expr(name, param, expr);
-    is_func_name = 1;
     printf(COLOR_CYAN "Plotting function %s(%s) = %s\n" COLOR_RESET, name,
            param, expr);
   } else {
@@ -338,7 +340,7 @@ void plot_function(const char *func_ref) {
   int width = 60;
   int height = 20;
 
-  double old_val_param, old_val_x;
+  double old_val_param;
   int had_param = get_variable(param, &old_val_param);
   // If param is not 'x', we might need to save 'x' too if we standardized on
   // it, but here we just use 'param' variable for evaluation.
