@@ -5,6 +5,7 @@
 #include "vars.h"
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int main() {
@@ -40,6 +41,10 @@ int main() {
         list_variables();
       } else if (strcmp(token, "funcs") == 0) {
         list_functions();
+      } else if (strcmp(token, "exit") == 0 || strcmp(token, "quit") == 0) {
+        disableRawMode();
+        printf("Goodbye!\n");
+        exit(0);
       } else if (strncmp(token, "unset ", 6) == 0) {
         // ... same logic but on 'token' ...
         char var_name[BUFFER_SIZE];
@@ -65,12 +70,20 @@ int main() {
           }
         }
       } else if (strncmp(token, "plot(", 5) == 0) {
-        // Extact content inside plot(...)
+        // Extract content inside plot(...) handling nested parentheses
         char content[BUFFER_SIZE];
         int i = 5;
         int k = 0;
-        while (token[i] && token[i] != ')') {
-          content[k++] = token[i++];
+        int depth = 1;
+        while (token[i] && depth > 0) {
+          if (token[i] == '(')
+            depth++;
+          if (token[i] == ')')
+            depth--;
+          if (depth > 0)
+            content[k++] = token[i++];
+          else
+            i++; // skip final ')'
         }
         content[k] = '\0';
         plot_function(content);
