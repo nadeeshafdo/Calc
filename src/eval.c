@@ -124,6 +124,7 @@ CalcResult solve_math(const char *raw_expr) {
   CharStack ops = {.top = -1};
   CalcResult res = {0, 0};
   int i = 0;
+  int can_be_unary = 1;
 
   while (expr[i]) {
     if (isdigit(expr[i]) || expr[i] == '.') {
@@ -131,6 +132,7 @@ CalcResult solve_math(const char *raw_expr) {
       double val = strtod(&expr[i], &end_ptr);
       d_push(&values, val);
       i = end_ptr - expr;
+      can_be_unary = 0;
     } else if (isalpha(expr[i])) {
       char var_name[VAR_NAME_LEN];
       int k = 0;
@@ -151,19 +153,14 @@ CalcResult solve_math(const char *raw_expr) {
           c_push(&ops, 'q'); // q for sqrt
         else if (strcmp(var_name, "log") == 0)
           c_push(&ops, 'l');
-        else if (strcmp(var_name, "sqrt") == 0)
-          c_push(&ops, 'q'); // q for sqrt
-        else if (strcmp(var_name, "log") == 0)
-          c_push(&ops, 'l');
+        can_be_unary = 1; // Function expects (
       } else if (is_user_function_defined(var_name)) {
         int idx = get_user_func_index(var_name);
         if (idx >= 0) {
-          // Store as negative value: -1 - index
-          // index 0 -> -1
-          // index 1 -> -2
           char op_code = (char)(-1 - idx);
           c_push(&ops, op_code);
         }
+        can_be_unary = 1; // User function expects (
       } else {
         double val;
         if (get_variable(var_name, &val)) {
@@ -172,10 +169,12 @@ CalcResult solve_math(const char *raw_expr) {
           res.error = 4; // Unknown Var
           return res;
         }
+        can_be_unary = 0;
       }
     } else if (expr[i] == '(') {
       c_push(&ops, '(');
       i++;
+      can_be_unary = 1;
     } else if (expr[i] == ')') {
       while (ops.top != -1 && c_peek(&ops) != '(') {
         double val2 = d_pop(&values);
@@ -218,23 +217,16 @@ CalcResult solve_math(const char *raw_expr) {
             // User function
             int idx = -1 - func;
             if (idx >= 0 && idx < func_count) {
-              // Save existing variable if any
               char *param = functions[idx].param;
               double old_val;
               int had_var = get_variable(param, &old_val);
-
-              // Set param
               set_variable(param, val);
-
-              // Eval
               CalcResult user_res = solve_math(functions[idx].expr);
               if (user_res.error) {
                 res.error = user_res.error;
                 return res;
               }
               result = user_res.result;
-
-              // Restore
               if (had_var)
                 set_variable(param, old_val);
               else
@@ -245,8 +237,21 @@ CalcResult solve_math(const char *raw_expr) {
         }
       }
       i++;
+      can_be_unary = 0;
     } else {
       char current_op = expr[i];
+
+      if (can_be_unary) {
+        if (current_op == '-') {
+          // Push 0 to treat as 0 - x
+          d_push(&values, 0);
+        } else if (current_op == '+') {
+          // Ignore unary plus
+          i++;
+          continue;
+        }
+      }
+
       while (ops.top != -1 &&
              precedence(c_peek(&ops)) >= precedence(current_op)) {
         double val2 = d_pop(&values);
@@ -258,6 +263,7 @@ CalcResult solve_math(const char *raw_expr) {
       }
       c_push(&ops, current_op);
       i++;
+      can_be_unary = 1;
     }
   }
 
