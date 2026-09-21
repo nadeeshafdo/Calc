@@ -88,9 +88,15 @@ void print_help() {
   printf("  vars              List all defined variables\n");
   printf("  funcs             List all defined functions\n");
   printf("  plot(expr)        Plot an expression or function\n");
+  printf("\nOperators:\n");
+  printf("  + - * / ^         Add, sub, mul, div, power\n");
+  printf("  %%                 Percent: N%% = N/100, A%%B = A*B/100\n");
   printf("\nExamples:\n");
   printf("  2 + 3 * 4         Evaluate basic arithmetic\n");
   printf("  (10 - 2) / 4      Use parentheses for grouping\n");
+  printf("  500%%               Percentage (500/100 = 5)\n");
+  printf("  500%%25             Percent of (500*25/100 = 125)\n");
+  printf("  100 * 10%%          10%% of 100 = 10\n");
   printf("  x = 42            Assign a value to a variable\n");
   printf("  f(x) = x^2        Define a function\n");
   printf("  plot(f)           Plot the function f\n");

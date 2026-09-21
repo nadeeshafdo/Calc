@@ -52,11 +52,8 @@ double apply_op(double a, double b, char op, int *error) {
   case '^':
     return pow(a, b);
   case '%':
-    if (b == 0) {
-      *error = 1;
-      return 0;
-    }
-    return fmod(a, b);
+    // Percentage: A % B = A * B / 100 (postfix unary handled in solve_math)
+    return (a * b) / 100.0;
   default:
     *error = 2;
     return 0; // BadOp
@@ -67,25 +64,34 @@ double apply_op(double a, double b, char op, int *error) {
 void normalize_expression(char *out, const char *in) {
   int j = 0;
   for (int i = 0; in[i]; i++) {
-    if (isspace(in[i]))
+    if (isspace((unsigned char)in[i]))
       continue; // Strip spaces
 
     out[j++] = in[i];
 
     char curr = in[i];
-    char next = in[i + 1];
-    while (next && isspace(next))
-      next = in[i++ + 2]; // Peek past spaces
+    // Peek past spaces without mutating i
+    int k2 = i + 1;
+    while (in[k2] && isspace((unsigned char)in[k2]))
+      k2++;
+    char next = in[k2];
 
     if (next == 0)
       break;
 
     // Rule 1: ) followed by ( or number or letter -> Insert *
-    if (curr == ')' && (next == '(' || isalnum(next))) {
+    if (curr == ')' && (next == '(' || isalnum((unsigned char)next))) {
       out[j++] = '*';
     }
     // Rule 2: number followed by ( or letter -> Insert *
-    else if (isdigit(curr) && (next == '(' || isalpha(next))) {
+    else if (isdigit((unsigned char)curr) &&
+             (next == '(' || isalpha((unsigned char)next))) {
+      out[j++] = '*';
+    }
+    // Rule 2b: % (postfix percent) followed by number/letter/(/. -> Insert *
+    // e.g. "500%25" -> "500%*25" so (500%) * 25 = 125
+    else if (curr == '%' &&
+             (next == '(' || isalnum((unsigned char)next) || next == '.')) {
       out[j++] = '*';
     }
     // Rule 3: letter followed by ( -> Insert * UNLESS it's a function
@@ -236,6 +242,17 @@ CalcResult solve_math(const char *raw_expr) {
           d_push(&values, result);
         }
       }
+      i++;
+      can_be_unary = 0;
+    } else if (expr[i] == '%') {
+      // Postfix percent: N% = N/100. Binary "A%B" is handled via
+      // normalize inserting '*' -> "(A%) * B" = A*B/100.
+      if (values.top == -1 || can_be_unary) {
+        res.error = 3;
+        return res;
+      }
+      double val = d_pop(&values);
+      d_push(&values, val / 100.0);
       i++;
       can_be_unary = 0;
     } else {
