@@ -26,6 +26,7 @@ add_compile_definitions(VERSION="${GIT_VERSION}")
 add_executable(calc
     src/main.c
     src/eval.c
+    src/funcs.c
     src/stack.c
     src/vars.c
     src/ui.c
