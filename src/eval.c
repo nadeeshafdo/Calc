@@ -10,6 +10,8 @@
 
 #define MAX_RECURSION_DEPTH 64
 
+char solve_output[BUFFER_SIZE * 4];
+
 // --- Helper for Functions ---
 // --- Helper for Functions ---
 int is_function_name(const char *s) {
@@ -474,6 +476,7 @@ CalcResult evaluate_expression(const char *expr) {
 }
 
 /* ---------- Equation solvers (v3.0.0) ---------- */
+#define SOL_PRINTF(...) snprintf(solve_output + strlen(solve_output), sizeof(solve_output) - strlen(solve_output), __VA_ARGS__)
 
 static double eval_expr_at(const char *e, const char *v, double t, int *err) {
   double old; int had = get_variable((char*)v, &old);
@@ -525,6 +528,7 @@ static int get_all_variables(const char *expr, int max_vars, char var_names[][VA
 }
 
 int solve_equation(const char *expr) {
+  solve_output[0]=0;
   const char *eq = strchr(expr, '=');
   if (!eq) return 1;
   char lhs[BUFFER_SIZE], rhs[BUFFER_SIZE];
@@ -539,7 +543,7 @@ int solve_equation(const char *expr) {
     nunk = get_all_variables(expr, 8, unknowns);
   }
   if (nunk != 1) {
-    printf("Error: expected 1 unknown variable.\n");
+    SOL_PRINTF("Error: expected 1 unknown variable.\n");
     return 1;
   }
   const char *v = unknowns[0];
@@ -555,39 +559,40 @@ int solve_equation(const char *expr) {
   /* verify */
   double f2pred = 4*a + 2*b + c;
   if (fabs(f2 - f2pred) > 1e-6) {
-    printf("Error: not a linear/quadratic equation.\n");
+    SOL_PRINTF("Error: not a linear/quadratic equation.\n");
     return 1;
   }
   if (fabs(a) < 1e-12) {
     if (fabs(b) < 1e-12) {
-      if (fabs(c) < 1e-12) printf("Infinite solutions.\n");
-      else printf("No solution.\n");
+      if (fabs(c) < 1e-12) SOL_PRINTF("Infinite solutions.\n");
+      else SOL_PRINTF("No solution.\n");
       return 0;
     }
     double root = -c / b;
     set_variable((char*)v, root);
-    printf("%s = %.6g\n", v, root);
+    SOL_PRINTF("%s = %.6g\n", v, root);
     return 0;
   }
   double disc = b*b - 4*a*c;
   if (disc < 0) {
-    printf("No real roots.\n");
+    SOL_PRINTF("No real roots.\n");
     return 0;
   }
   if (disc == 0) {
     double root = -b / (2*a);
     set_variable((char*)v, root);
-    printf("%s = %.6g\n", v, root);
+    SOL_PRINTF("%s = %.6g\n", v, root);
     return 0;
   }
   double r1 = (-b + sqrt(disc)) / (2*a);
   double r2 = (-b - sqrt(disc)) / (2*a);
   set_variable((char*)v, r1);
-  printf("%s = %.6g, %.6g\n", v, r1, r2);
+  SOL_PRINTF("%s = %.6g, %.6g\n", v, r1, r2);
   return 0;
 }
 
 int solve_system(const char *line) {
+  solve_output[0]=0;
   /* split equations by ; */
   char eq1[BUFFER_SIZE], eq2[BUFFER_SIZE];
   eq1[0]=eq2[0]=0;
@@ -605,7 +610,7 @@ int solve_system(const char *line) {
     nunk = get_all_variables(line, 4, unknowns);
   }
   if (nunk != 2) {
-    printf("Error: expected 2 unknowns.\n");
+    SOL_PRINTF("Error: expected 2 unknowns.\n");
     return 1;
   }
   const char *u = unknowns[0];
@@ -636,7 +641,7 @@ int solve_system(const char *line) {
 
   double det = A1*B2 - A2*B1;
   if (fabs(det) < 1e-12) {
-    printf("No unique solution.\n");
+    SOL_PRINTF("No unique solution.\n");
     return 0;
   }
   double uval = (-(C1)*B2 - B1*(-(C2))) / det; /* solve A1 u + B1 v = -C1 */
@@ -644,6 +649,6 @@ int solve_system(const char *line) {
   double vval = (A1*(-(C2)) - (-(C1))*A2) / det;
   set_variable((char*)u, uval);
   set_variable((char*)vv, vval);
-  printf("%s = %.6g, %s = %.6g\n", u, uval, vv, vval);
+  SOL_PRINTF("%s = %.6g, %s = %.6g\n", u, uval, vv, vval);
   return 0;
 }

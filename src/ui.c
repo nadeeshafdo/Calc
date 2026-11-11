@@ -654,30 +654,14 @@ static void tui_process_token(char *token) {
         else snprintf(buf,sizeof(buf),"= %.6g", rhs.result);
         tui_log_add(buf);
       } else {
-        FILE *tmp = tmpfile();
-        if (tmp) {
-          FILE *oldout = stdout;
-          stdout = tmp;
-          if (strchr(token, ';')) solve_system(token);
-          else solve_equation(token);
-          fflush(stdout);
-          stdout = oldout;
-          rewind(tmp);
-          char buf[BUFFER_SIZE*4];
-          size_t n = fread(buf, 1, sizeof(buf)-1, tmp);
-          buf[n] = 0;
-          fclose(tmp);
-          /* log each line */
-          char *line = strtok(buf, "\n");
-          while (line) {
-            tui_log_add(line);
-            line = strtok(NULL, "\n");
-          }
-          if (n == 0) tui_log_add("No output.");
-        } else {
-          if (strchr(token, ';')) solve_system(token);
-          else solve_equation(token);
+        if (strchr(token, ';')) solve_system(token);
+        else solve_equation(token);
+        char *line = strtok(solve_output, "\n");
+        while (line) {
+          tui_log_add(line);
+          line = strtok(NULL, "\n");
         }
+        if (solve_output[0] == 0) tui_log_add("No output.");
       }
     } else {
       CalcResult res = evaluate_expression(token);
