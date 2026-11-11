@@ -63,11 +63,12 @@ double apply_op(double a, double b, char op, int *error) {
 // Pre-processor to handle Implicit Multiplication
 void normalize_expression(char *out, const char *in) {
   int j = 0;
+  int cap = (BUFFER_SIZE * 2) - 1;
   for (int i = 0; in[i]; i++) {
     if (isspace((unsigned char)in[i]))
       continue; // Strip spaces
 
-    out[j++] = in[i];
+    if (j < cap) out[j++] = in[i];
 
     char curr = in[i];
     // Peek past spaces without mutating i
@@ -81,18 +82,18 @@ void normalize_expression(char *out, const char *in) {
 
     // Rule 1: ) followed by ( or number or letter -> Insert *
     if (curr == ')' && (next == '(' || isalnum((unsigned char)next))) {
-      out[j++] = '*';
+      if (j < cap) out[j++] = '*';
     }
     // Rule 2: number followed by ( or letter -> Insert *
     else if (isdigit((unsigned char)curr) &&
              (next == '(' || isalpha((unsigned char)next))) {
-      out[j++] = '*';
+      if (j < cap) out[j++] = '*';
     }
     // Rule 2b: % (postfix percent) followed by number/letter/(/. -> Insert *
     // e.g. "500%25" -> "500%*25" so (500%) * 25 = 125
     else if (curr == '%' &&
              (next == '(' || isalnum((unsigned char)next) || next == '.')) {
-      out[j++] = '*';
+      if (j < cap) out[j++] = '*';
     }
     // Rule 3: letter followed by ( -> Insert * UNLESS it's a function
     else if (isalpha(curr) && next == '(') {
@@ -114,7 +115,7 @@ void normalize_expression(char *out, const char *in) {
       word[k] = '\0';
 
       if (!is_function_name(word) && !is_user_function_defined(word)) {
-        out[j++] = '*';
+        if (j < cap) out[j++] = '*';
       }
     }
   }
@@ -270,7 +271,9 @@ CalcResult solve_math(const char *raw_expr) {
       }
 
       while (ops.top != -1 &&
-             precedence(c_peek(&ops)) >= precedence(current_op)) {
+             ((current_op == '^')
+                  ? (precedence(c_peek(&ops)) > precedence(current_op))
+                  : (precedence(c_peek(&ops)) >= precedence(current_op)))) {
         double val2 = d_pop(&values);
         double val1 = d_pop(&values);
         char op = c_pop(&ops);
