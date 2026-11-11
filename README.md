@@ -1,16 +1,20 @@
-# Calc
+# Calc v3.0.0
 
-A lightweight command-line calculator written in C.
+A native, zero-dependency (libm only) command-line calculator in C with a split-pane TUI, Unicode Braille graph plotter, equation solvers, and expanded math library.
 
 ## Features
+- **Split-Pane TUI** (TTY mode): status bar, REPL log + vars/funcs panel, Braille graph canvas, input bar.
+- **Braille Graph Plotter**: high-resolution Unicode Braille (U+2800) with axes, range labels, interactive zoom/pan (Ctrl-G, +/-, arrows, r, Esc).
 - **Variables**: `x=10`, `y=x*2`, `unset x`, `vars`
-- **User Functions**: `f(x)=x^2`, `funcs`
-- **Operators**: `+ - * / ^ %` (percent: `N%` = N/100, `A%B` = A*B/100)
+- **User Functions**: `f(x)=x^2`, `funcs`, recursion guard
+- **Math**: sin, cos, tan, asin, acos, atan, sqrt, log/ln, log10, abs, floor, ceil, round, exp, pow (^), %
+- **Constants**: pi, e, tau, phi
+- **Operators**: `+ - * / ^ %` (percent: `N%`=N/100, `A%B`=A*B/100)
 - **Implicit Multiplication**: `2x`, `(a)(b)`, `500%25`
-- **UI**: GNU-style raw-mode REPL with `Ctrl-C` (quit) and `Ctrl-H` (help).
-- **Line Editing**: Left/Right arrows, Backspace, Insertion.
-- **History**: Up/Down arrows.
-- **Plotting**: `plot(f)` / `plot(sin(x))` ASCII graph.
+- **Chained Assignment**: `x = y = 10`
+- **Equation Solvers**: `2x+5=15`, `4x^2-5x-12=0`, `7x+2y=24; 8x+2y=30`
+- **Plotting**: `plot(expr)` or `plot(expr, xmin, xmax, ymin, ymax)`
+- **Non-interactive mode**: automatic line-by-line REPL when stdin is not a TTY (for pipes/CTest).
 
 
 ## Build & Install
