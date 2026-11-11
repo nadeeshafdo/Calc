@@ -10,5 +10,7 @@ void print_help();
 
 // --- Plotting ---
 void plot_function(const char *func_name_or_expr);
+// --- TUI ---
+void run_tui(void);
 
 #endif

@@ -6,9 +6,11 @@
 // --- Global Symbol Table ---
 Variable variables[MAX_VARS] = {
     {"pi", 3.14159265358979323846},
-    {"e", 2.71828182845904523536}
+    {"e", 2.71828182845904523536},
+    {"tau", 6.28318530717958647692},
+    {"phi", 1.61803398874989484820}
 };
-int var_count = 2;
+int var_count = 4;
 
 void set_variable(char *name, double val) {
     for (int i = 0; i < var_count; i++) {
