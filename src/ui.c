@@ -64,12 +64,16 @@ void add_to_history(const char *cmd) {
     return;
 
   if (history_count < HISTORY_MAX) {
-    strcpy(history[history_count++], cmd);
+    strncpy(history[history_count], cmd, BUFFER_SIZE - 1);
+    history[history_count][BUFFER_SIZE - 1] = 0;
+    history_count++;
   } else {
     for (int i = 1; i < HISTORY_MAX; i++) {
-      strcpy(history[i - 1], history[i]);
+      strncpy(history[i - 1], history[i], BUFFER_SIZE - 1);
+      history[i - 1][BUFFER_SIZE - 1] = 0;
     }
-    strcpy(history[HISTORY_MAX - 1], cmd);
+    strncpy(history[HISTORY_MAX - 1], cmd, BUFFER_SIZE - 1);
+    history[HISTORY_MAX - 1][BUFFER_SIZE - 1] = 0;
   }
 }
 
@@ -315,8 +319,8 @@ void plot_function(const char *func_ref) {
   // Strip (x) if present
   int len = strlen(func_ref);
   int k = 0;
-  for (int i = 0; i < len; i++) {
-    if (isalnum(func_ref[i]))
+  for (int i = 0; i < len && k < VAR_NAME_LEN - 1; i++) {
+    if (isalnum((unsigned char)func_ref[i]))
       name[k++] = func_ref[i];
     else
       break;
@@ -332,7 +336,8 @@ void plot_function(const char *func_ref) {
            param, expr);
   } else {
     // Treat as expression with param 'x'
-    strcpy(expr, func_ref);
+    strncpy(expr, func_ref, BUFFER_SIZE - 1);
+    expr[BUFFER_SIZE - 1] = 0;
     strcpy(param, "x");
     printf(COLOR_CYAN "Plotting expression %s (param: %s)\n" COLOR_RESET, expr,
            param);
