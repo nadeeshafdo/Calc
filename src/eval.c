@@ -437,7 +437,7 @@ CalcResult evaluate_expression(const char *expr) {
 
   if (eq_sign) {
     // ASSIGNMENT
-    int len = eq_sign - expr;
+    int len = (int)(eq_sign - expr);
 
     // Check LHS for validity as a simple variable assignment
     char lhs_clean[BUFFER_SIZE];

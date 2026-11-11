@@ -28,7 +28,7 @@ static HANDLE hConsole;
 static struct termios orig_termios;
 #endif
 
-void disableRawMode() {
+void disableRawMode(void) {
 #ifdef _WIN32
   SetConsoleMode(hConsole, orig_console_mode);
 #else
@@ -132,7 +132,7 @@ void get_input_raw(char *buffer) {
           if (history_index > 0) {
             history_index--;
             strcpy(buffer, history[history_index]);
-            len = strlen(buffer);
+            len = (int)strlen(buffer);
             pos = len;
             printf("\r" COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s\033[K",
                    buffer);
@@ -146,7 +146,7 @@ void get_input_raw(char *buffer) {
               pos = 0;
             } else {
               strcpy(buffer, history[history_index]);
-              len = strlen(buffer);
+              len = (int)strlen(buffer);
               pos = len;
             }
             printf("\r" COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s\033[K",
@@ -240,7 +240,7 @@ void get_input_raw(char *buffer) {
           if (history_index > 0) {
             history_index--;
             strcpy(buffer, history[history_index]);
-            len = strlen(buffer);
+            len = (int)strlen(buffer);
             pos = len;
             printf("\r" COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s\033[K",
                    buffer);
@@ -255,7 +255,7 @@ void get_input_raw(char *buffer) {
               pos = 0;
             } else {
               strcpy(buffer, history[history_index]);
-              len = strlen(buffer);
+              len = (int)strlen(buffer);
               pos = len;
             }
             printf("\r" COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s\033[K",
@@ -317,7 +317,7 @@ void plot_function(const char *func_ref) {
 
   // Check if func_ref matches a function name
   // Strip (x) if present
-  int len = strlen(func_ref);
+  int len = (int)strlen(func_ref);
   int k = 0;
   for (int i = 0; i < len && k < VAR_NAME_LEN - 1; i++) {
     if (isalnum((unsigned char)func_ref[i]))
@@ -631,7 +631,7 @@ static void tui_process_token(char *token) {
     } else if (eq) {
       /* assignment or equation */
       /* simple var assignment? */
-      int len = eq - token;
+      int len = (int)(eq - token);
       char lhs[BUFFER_SIZE];
       int k=0,j=0,valid=1;
       while (j < len && isspace((unsigned char)token[j])) j++;
