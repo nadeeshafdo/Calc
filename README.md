@@ -3,19 +3,20 @@
 A lightweight command-line calculator written in C.
 
 ## Features
-- **Variables**: `x=10`, `y=x*2`, chain assign `x=y=z`, `unset x`, `vars`
-
-- **Equation Solving**:
-  - Linear: `x+12=15`
-  - Quadratic: `4x^2-5x-12=0`
-  - Simultaneous: `7x+2y=24; 8x+2y=30`
-- **Implicit Multiplication**: `2x`, `(a)(b)`
+- **Variables**: `x=10`, `y=x*2`, `unset x`, `vars`
+- **Functions**: `f(x)=x^2`, `funcs`, recursion supported
+- **Implicit Multiplication**: `2x`, `(a)(b)`, `500%25`
+- **Percent**: `N%` (N/100) and `A%B` (A*B/100)
+- **Plotting**: `plot(f)` / `plot(sin(x))` ASCII graph
+- **TUI**: ncurses-based interface (manatui), history, line editing
 - **UI**: GNU-style interface with `Ctrl-C` (quit) and `Ctrl-H` (help).
 - **Line Editing**: Left/Right arrows, Backspace, Insertion.
 - **History**: Up/Down arrows.
 
 
 ## Build & Install
+
+Dependencies: `libncursesw` (and `libm`).
 
 ```bash
 # Build
