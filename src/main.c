@@ -139,6 +139,7 @@ static void process_token_noninteractive(char *token) {
           solve_system(token);
         else
           solve_equation(token);
+        printf("%s\n", solve_output);
       }
     } else {
       CalcResult res = evaluate_expression(token);
