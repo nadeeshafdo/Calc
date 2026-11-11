@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAX_RECURSION_DEPTH 64
+
 // --- Helper for Functions ---
 // --- Helper for Functions ---
 int is_function_name(const char *s) {
@@ -87,7 +89,25 @@ void normalize_expression(char *out, const char *in) {
     // Rule 2: number followed by ( or letter -> Insert *
     else if (isdigit((unsigned char)curr) &&
              (next == '(' || isalpha((unsigned char)next))) {
-      if (j < cap) out[j++] = '*';
+      int do_insert = 1;
+      if (next == '(') {
+        int prev = i - 1;
+        while (prev >= 0 && isspace((unsigned char)in[prev])) prev--;
+        if (prev >= 0 && isalnum((unsigned char)in[prev])) {
+          int start = i;
+          while (start > 0 && isalnum((unsigned char)in[start - 1])) start--;
+          char word[VAR_NAME_LEN];
+          int wk = 0;
+          for (int m = start; m <= i && wk < VAR_NAME_LEN - 1; m++) {
+            if (!isspace((unsigned char)in[m])) word[wk++] = in[m];
+          }
+          word[wk] = '\0';
+          if (is_function_name(word) || is_user_function_defined(word)) {
+            do_insert = 0;
+          }
+        }
+      }
+      if (do_insert && j < cap) out[j++] = '*';
     }
     // Rule 2b: % (postfix percent) followed by number/letter/(/. -> Insert *
     // e.g. "500%25" -> "500%*25" so (500%) * 25 = 125
@@ -112,8 +132,6 @@ void normalize_expression(char *out, const char *in) {
       }
       word[k] = '\0';
 
-      word[k] = '\0';
-
       if (!is_function_name(word) && !is_user_function_defined(word)) {
         if (j < cap) out[j++] = '*';
       }
@@ -127,8 +145,8 @@ CalcResult solve_math(const char *raw_expr) {
   char expr[BUFFER_SIZE * 2]; // Double size to accommodate inserted *
   normalize_expression(expr, raw_expr);
 
-  DoubleStack values = {.top = -1};
-  CharStack ops = {.top = -1};
+  DoubleStack values = {.top = -1, .error = 0};
+  CharStack ops = {.top = -1, .error = 0};
   CalcResult res = {0, 0};
   int i = 0;
   int can_be_unary = 1;
@@ -227,17 +245,27 @@ CalcResult solve_math(const char *raw_expr) {
               char *param = functions[idx].param;
               double old_val;
               int had_var = get_variable(param, &old_val);
+
+              static int func_depth = 0;
+              if (func_depth >= MAX_RECURSION_DEPTH) {
+                res.error = 3;
+                return res;
+              }
+              func_depth++;
               set_variable(param, val);
               CalcResult user_res = solve_math(functions[idx].expr);
+              func_depth--;
+
+              if (had_var)
+                set_variable(param, old_val);
+              else
+                unset_variable(param);
+
               if (user_res.error) {
                 res.error = user_res.error;
                 return res;
               }
               result = user_res.result;
-              if (had_var)
-                set_variable(param, old_val);
-              else
-                unset_variable(param);
             }
           }
           d_push(&values, result);
@@ -296,7 +324,9 @@ CalcResult solve_math(const char *raw_expr) {
       return res;
   }
 
-  if (values.top == -1)
+  if (values.error || ops.error)
+    res.error = 3;
+  else if (values.top == -1)
     res.error = 3;
   else
     res.result = d_pop(&values);

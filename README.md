@@ -4,19 +4,16 @@ A lightweight command-line calculator written in C.
 
 ## Features
 - **Variables**: `x=10`, `y=x*2`, `unset x`, `vars`
-- **Functions**: `f(x)=x^2`, `funcs`, recursion supported
+- **User Functions**: `f(x)=x^2`, `funcs`
+- **Operators**: `+ - * / ^ %` (percent: `N%` = N/100, `A%B` = A*B/100)
 - **Implicit Multiplication**: `2x`, `(a)(b)`, `500%25`
-- **Percent**: `N%` (N/100) and `A%B` (A*B/100)
-- **Plotting**: `plot(f)` / `plot(sin(x))` ASCII graph
-- **TUI**: ncurses-based interface (manatui), history, line editing
-- **UI**: GNU-style interface with `Ctrl-C` (quit) and `Ctrl-H` (help).
+- **UI**: GNU-style raw-mode REPL with `Ctrl-C` (quit) and `Ctrl-H` (help).
 - **Line Editing**: Left/Right arrows, Backspace, Insertion.
 - **History**: Up/Down arrows.
+- **Plotting**: `plot(f)` / `plot(sin(x))` ASCII graph.
 
 
 ## Build & Install
-
-Dependencies: `libncursesw` (and `libm`).
 
 ```bash
 # Build

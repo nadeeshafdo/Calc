@@ -3,8 +3,8 @@
 
 #define MAX_STACK 100
 
-typedef struct { double data[MAX_STACK]; int top; } DoubleStack;
-typedef struct { char data[MAX_STACK]; int top; } CharStack;
+typedef struct { double data[MAX_STACK]; int top; int error; } DoubleStack;
+typedef struct { char data[MAX_STACK]; int top; int error; } CharStack;
 
 void d_push(DoubleStack *s, double val);
 double d_pop(DoubleStack *s);
