@@ -22,6 +22,9 @@ if(NOT GIT_VERSION)
 endif()
 
 add_compile_definitions(VERSION="${GIT_VERSION}")
+if(MSVC)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
 
 add_executable(calc
     src/main.c
