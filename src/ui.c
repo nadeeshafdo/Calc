@@ -507,7 +507,7 @@ static void tui_process_token(char *token) {
   if (strcmp(token, "vars") == 0) {
     tui_log_add("Defined Variables:");
     for (int i = 0; i < var_count; i++) {
-      char buf[128];
+      char buf[BUFFER_SIZE];
       snprintf(buf, sizeof(buf), "  %s = %.6g", variables[i].name, variables[i].value);
       tui_log_add(buf);
     }
@@ -531,10 +531,10 @@ static void tui_process_token(char *token) {
     var_name[k] = 0;
     if (k > 0) {
       if (is_variable_defined(var_name)) { unset_variable(var_name); 
-        char buf[128]; snprintf(buf,sizeof(buf),"Variable '%s' unset.",var_name); tui_log_add(buf);}
+        char buf[BUFFER_SIZE]; snprintf(buf,sizeof(buf),"Variable '%s' unset.",var_name); tui_log_add(buf);}
       else if (is_user_function_defined(var_name)) { unset_function(var_name);
-        char buf[128]; snprintf(buf,sizeof(buf),"Function '%s' unset.",var_name); tui_log_add(buf);}
-      else { char buf[128]; snprintf(buf,sizeof(buf),"Error: '%s' not found.",var_name); tui_log_add(buf);}
+        char buf[BUFFER_SIZE]; snprintf(buf,sizeof(buf),"Function '%s' unset.",var_name); tui_log_add(buf);}
+      else { char buf[BUFFER_SIZE]; snprintf(buf,sizeof(buf),"Error: '%s' not found.",var_name); tui_log_add(buf);}
     }
   } else if (strncmp(token, "plot(", 5) == 0) {
     char content[BUFFER_SIZE];
@@ -623,7 +623,7 @@ static void tui_process_token(char *token) {
       if (m>0 && isdigit((unsigned char)param[0])) valid=0;
       if (valid) {
         set_function(name, param, eq+1);
-        char buf[128]; snprintf(buf,sizeof(buf),"Defined function %s(%s)",name,param);
+        char buf[BUFFER_SIZE]; snprintf(buf,sizeof(buf),"Defined function %s(%s)",name,param);
         tui_log_add(buf);
       } else {
         tui_log_add("Error: Invalid function definition.");
@@ -644,7 +644,7 @@ static void tui_process_token(char *token) {
       if (valid) {
         CalcResult rhs = evaluate_expression(eq+1);
         if (rhs.error==0) set_variable(lhs, rhs.result);
-        char buf[128];
+        char buf[BUFFER_SIZE];
         if (rhs.error==1) snprintf(buf,sizeof(buf),"Error: Division by zero.");
         else if (rhs.error==2) snprintf(buf,sizeof(buf),"Error: Invalid Operator.");
         else if (rhs.error==3) snprintf(buf,sizeof(buf),"Error: Invalid expression.");
@@ -665,7 +665,7 @@ static void tui_process_token(char *token) {
       }
     } else {
       CalcResult res = evaluate_expression(token);
-      char buf[128];
+      char buf[BUFFER_SIZE];
       if (res.error==1) snprintf(buf,sizeof(buf),"Error: Division by zero.");
       else if (res.error==2) snprintf(buf,sizeof(buf),"Error: Invalid Operator.");
       else if (res.error==3) snprintf(buf,sizeof(buf),"Error: Invalid expression.");
