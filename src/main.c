@@ -25,23 +25,27 @@ int main(void) {
       /* strip trailing newline */
       input[strcspn(input, "\r\n")] = '\0';
       if (strlen(input) == 0) continue;
-      if (strchr(input, '=') && strchr(input, ';')) {
-        /* treat whole line as a simultaneous system */
-        process_token_noninteractive(input);
-      } else {
+      if (line_is_linear_system(input)) {
+        solve_system(input);
+        fputs(solve_output, stdout);
+        continue;
+      }
       char work[BUFFER_SIZE];
       strncpy(work, input, BUFFER_SIZE - 1);
       work[BUFFER_SIZE - 1] = '\0';
       char *tok = strtok(work, ";");
       while (tok != NULL) {
         while (isspace((unsigned char)*tok)) tok++;
+        if (*tok == '\0') {
+          tok = strtok(NULL, ";");
+          continue;
+        }
         char *end = tok + strlen(tok) - 1;
         while (end > tok && isspace((unsigned char)*end)) end--;
         *(end + 1) = '\0';
         if (strlen(tok) > 0) process_token_noninteractive(tok);
         tok = strtok(NULL, ";");
       }
-      } /* close else */
     } /* close while fgets */
     return 0;
   }
@@ -75,81 +79,9 @@ static void process_token_noninteractive(char *token) {
       }
     }
   } else if (strncmp(token, "plot(", 5) == 0) {
-    /* ignore plotting in noninteractive */
     printf("Plot not available in non-interactive mode.\n");
   } else {
-    char *po = strchr(token, '(');
-    char *pc = strchr(token, ')');
-    char *eq = strchr(token, '=');
-    if (po && pc && eq && po < pc && pc < eq) {
-      char name[VAR_NAME_LEN], param[VAR_NAME_LEN];
-      int valid = 1, n = 0, m = 0;
-      char *p = token;
-      while (p < po) {
-        if (!isspace((unsigned char)*p)) {
-          if (!isalnum((unsigned char)*p)) valid = 0;
-          if (n < VAR_NAME_LEN - 1) name[n++] = *p; else valid = 0;
-        }
-        p++;
-      }
-      name[n] = 0;
-      if (n == 0) valid = 0;
-      if (n > 0 && isdigit((unsigned char)name[0])) valid = 0;
-      if (valid && is_function_name(name)) valid = 0;
-      p = po + 1;
-      while (p < pc) {
-        if (!isspace((unsigned char)*p)) {
-          if (!isalnum((unsigned char)*p)) valid = 0;
-          if (m < VAR_NAME_LEN - 1) param[m++] = *p; else valid = 0;
-        }
-        p++;
-      }
-      param[m] = 0;
-      if (m == 0) valid = 0;
-      if (m > 0 && isdigit((unsigned char)param[0])) valid = 0;
-      if (valid) {
-        set_function(name, param, eq + 1);
-        printf("Defined function %s(%s)\n", name, param);
-      } else {
-        printf("Error: Invalid function definition.\n");
-      }
-    } else if (eq) {
-      int len = eq - token;
-      char lhs[VAR_NAME_LEN];
-      int k = 0, j = 0, valid = 1;
-      while (j < len && isspace((unsigned char)token[j])) j++;
-      if (j < len && isalpha((unsigned char)token[j])) {
-        while (j < len && isalnum((unsigned char)token[j]) && k < VAR_NAME_LEN - 1) lhs[k++] = token[j++];
-        lhs[k] = 0;
-        while (j < len && isspace((unsigned char)token[j])) j++;
-        if (j != len) valid = 0;
-      } else valid = 0;
-      if (valid) {
-        CalcResult rhs = evaluate_expression(eq + 1);
-        if (rhs.error == 0) set_variable(lhs, rhs.result);
-        if (rhs.error == 1) printf("Error: Division by zero.\n");
-        else if (rhs.error == 2) printf("Error: Invalid Operator.\n");
-        else if (rhs.error == 3) printf("Error: Invalid expression.\n");
-        else if (rhs.error == 4) printf("Error: Unknown variable.\n");
-        else if (rhs.error == 5) printf("Error: Invalid assignment.\n");
-        else if (rhs.error == 6) printf("Error: Invalid Argument.\n");
-        else printf("= %.6g\n", rhs.result);
-      } else {
-        if (strchr(token, ';'))
-          solve_system(token);
-        else
-          solve_equation(token);
-        printf("%s\n", solve_output);
-      }
-    } else {
-      CalcResult res = evaluate_expression(token);
-      if (res.error == 1) printf("Error: Division by zero.\n");
-      else if (res.error == 2) printf("Error: Invalid Operator.\n");
-      else if (res.error == 3) printf("Error: Invalid expression.\n");
-      else if (res.error == 4) printf("Error: Unknown variable.\n");
-      else if (res.error == 5) printf("Error: Invalid assignment.\n");
-      else if (res.error == 6) printf("Error: Invalid Argument.\n");
-      else printf("= %.6g\n", res.result);
-    }
+    eval_dispatch(token);
+    fputs(solve_output, stdout);
   }
 }

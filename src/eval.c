@@ -163,7 +163,7 @@ CalcResult solve_math(const char *raw_expr) {
       char *end_ptr;
       double val = strtod(&expr[i], &end_ptr);
       d_push(&values, val);
-      i = end_ptr - expr;
+      i = (int)(end_ptr - expr);
       can_be_unary = 0;
     } else if (isalpha(expr[i])) {
       char var_name[VAR_NAME_LEN];
@@ -239,9 +239,13 @@ CalcResult solve_math(const char *raw_expr) {
 
       // Check if there is a function waiting
       if (ops.top != -1) {
-        char potential_func = c_peek(&ops);
-        if (strchr("sctqlgabfurnxoa", potential_func) || potential_func < 0) {
-          char func = c_pop(&ops);
+        /* User-function opcodes are signed negatives (-1 .. -MAX_FUNCS).
+           Read them as unsigned so this works when plain char is unsigned. */
+        unsigned char raw_op = (unsigned char)c_peek(&ops);
+        int is_user_op = raw_op >= (unsigned char)(256 - MAX_FUNCS);
+        int is_builtin_op = (raw_op < 128 && strchr("sctqlgabfurnxo", (char)raw_op) != NULL);
+        if (is_builtin_op || is_user_op) {
+          unsigned char func = (unsigned char)c_pop(&ops);
           double val = d_pop(&values);
           double result = 0;
 
@@ -270,8 +274,16 @@ CalcResult solve_math(const char *raw_expr) {
             }
             result = log10(val);
           } else if (func == 'a') {
+            if (val < -1.0 || val > 1.0) {
+              res.error = 6;
+              return res;
+            }
             result = asin(val);
           } else if (func == 'o') {
+            if (val < -1.0 || val > 1.0) {
+              res.error = 6;
+              return res;
+            }
             result = acos(val);
           } else if (func == 'n') {
             result = atan(val);
@@ -285,9 +297,9 @@ CalcResult solve_math(const char *raw_expr) {
             result = round(val);
           } else if (func == 'x') {
             result = exp(val);
-          } else if (func < 0) {
-            // User function
-            int idx = -1 - func;
+          } else if (func >= 128) {
+            // User function opcode stored as signed negative byte
+            int idx = -1 - (int)(signed char)func;
             if (idx >= 0 && idx < func_count) {
               char *param = functions[idx].param;
               double old_val;
@@ -400,7 +412,7 @@ int get_unknown_variables(const char *expr, int max_vars,
       name[k] = '\0';
 
       // Ignore functions
-      if (!is_function_name(name)) {
+      if (!is_function_name(name) && !is_user_function_defined(name)) {
         // Check if defined
         if (!is_variable_defined(name)) {
           // Check if already in list
@@ -514,7 +526,7 @@ static int get_all_variables(const char *expr, int max_vars, char var_names[][VA
       int k=0;
       while (isalnum((unsigned char)clean[i]) && k < VAR_NAME_LEN-1) name[k++]=clean[i++];
       name[k]=0;
-      if (!is_function_name(name) && !is_constant_name(name)) {
+      if (!is_function_name(name) && !is_user_function_defined(name) && !is_constant_name(name)) {
         int found=0;
         for (int j=0;j<count;j++) if (strcmp(var_names[j],name)==0){found=1;break;}
         if (!found) {
@@ -525,6 +537,14 @@ static int get_all_variables(const char *expr, int max_vars, char var_names[][VA
     } else i++;
   }
   return count;
+}
+
+/* Collect all non-constant, non-function identifiers regardless of whether
+   they were previously assigned. Excludes built-in constants pi, e, tau, phi.
+   Used for equation solving when LHS is not a simple assignment, so that a
+   user-defined x is still detected as the equation variable. */
+int get_equation_variables(const char *expr, int max_vars, char var_names[][VAR_NAME_LEN]) {
+  return get_all_variables(expr, max_vars, var_names);
 }
 
 int solve_equation(const char *expr) {
@@ -540,19 +560,30 @@ int solve_equation(const char *expr) {
   char unknowns[8][VAR_NAME_LEN];
   int nunk = get_unknown_variables(expr, 8, unknowns);
   if (nunk != 1) {
-    nunk = get_all_variables(expr, 8, unknowns);
+    nunk = get_equation_variables(expr, 8, unknowns);
   }
   if (nunk != 1) {
     SOL_PRINTF("Error: expected 1 unknown variable.\n");
     return 1;
   }
   const char *v = unknowns[0];
-  int e1,e2,e3,e4;
-  double f0 = eval_expr_at(lhs, v, 0, &e1) - eval_expr_at(rhs, v, 0, &e2);
-  double f1 = eval_expr_at(lhs, v, 1, &e1) - eval_expr_at(rhs, v, 1, &e2);
-  double fm1 = eval_expr_at(lhs, v, -1, &e1) - eval_expr_at(rhs, v, -1, &e2);
-  double f2 = eval_expr_at(lhs, v, 2, &e1) - eval_expr_at(rhs, v, 2, &e2);
-  (void)e3;(void)e4;
+  int ea = 0, eb = 0;
+  double l0 = eval_expr_at(lhs, v, 0, &ea);
+  double r0 = eval_expr_at(rhs, v, 0, &eb);
+  double l1 = eval_expr_at(lhs, v, 1, &ea);
+  double r1s = eval_expr_at(rhs, v, 1, &eb);
+  double lm = eval_expr_at(lhs, v, -1, &ea);
+  double rm = eval_expr_at(rhs, v, -1, &eb);
+  double l2 = eval_expr_at(lhs, v, 2, &ea);
+  double r2s = eval_expr_at(rhs, v, 2, &eb);
+  if (ea || eb) {
+    SOL_PRINTF("Error: Invalid expression.\n");
+    return 1;
+  }
+  double f0 = l0 - r0;
+  double f1 = l1 - r1s;
+  double fm1 = lm - rm;
+  double f2 = l2 - r2s;
   double c = f0;
   double a = (f1 + fm1) / 2.0 - c;
   double b = (f1 - fm1) / 2.0;
@@ -569,25 +600,22 @@ int solve_equation(const char *expr) {
       return 0;
     }
     double root = -c / b;
-    set_variable((char*)v, root);
     SOL_PRINTF("%s = %.6g\n", v, root);
     return 0;
   }
   double disc = b*b - 4*a*c;
-  if (disc < 0) {
+  if (disc < -1e-9) {
     SOL_PRINTF("No real roots.\n");
     return 0;
   }
-  if (disc == 0) {
+  if (disc < 1e-9) {
     double root = -b / (2*a);
-    set_variable((char*)v, root);
     SOL_PRINTF("%s = %.6g\n", v, root);
     return 0;
   }
-  double r1 = (-b + sqrt(disc)) / (2*a);
-  double r2 = (-b - sqrt(disc)) / (2*a);
-  set_variable((char*)v, r1);
-  SOL_PRINTF("%s = %.6g, %.6g\n", v, r1, r2);
+  double root1 = (-b + sqrt(disc)) / (2*a);
+  double root2 = (-b - sqrt(disc)) / (2*a);
+  SOL_PRINTF("%s = %.6g, %.6g\n", v, root1, root2);
   return 0;
 }
 
@@ -607,7 +635,7 @@ int solve_system(const char *line) {
   char unknowns[4][VAR_NAME_LEN];
   int nunk = get_unknown_variables(line, 4, unknowns);
   if (nunk != 2) {
-    nunk = get_all_variables(line, 4, unknowns);
+    nunk = get_equation_variables(line, 4, unknowns);
   }
   if (nunk != 2) {
     SOL_PRINTF("Error: expected 2 unknowns.\n");
@@ -631,13 +659,21 @@ int solve_system(const char *line) {
   strncpy(r2e, e+1, BUFFER_SIZE-1); r2e[BUFFER_SIZE-1]=0;
 
   /* evaluate coefficients: f = lhs - rhs = A*u + B*v + C */
-  int err;
+  int err = 0;
   double C1 = eval_expr_at2(l1e,u,0,vv,0,&err) - eval_expr_at2(r1e,u,0,vv,0,&err);
+  if (err) {
+    SOL_PRINTF("Error: Invalid expression.\n");
+    return 1;
+  }
   double A1 = eval_expr_at2(l1e,u,1,vv,0,&err) - eval_expr_at2(r1e,u,1,vv,0,&err) - C1;
   double B1 = eval_expr_at2(l1e,u,0,vv,1,&err) - eval_expr_at2(r1e,u,0,vv,1,&err) - C1;
   double C2 = eval_expr_at2(l2e,u,0,vv,0,&err) - eval_expr_at2(r2e,u,0,vv,0,&err);
   double A2 = eval_expr_at2(l2e,u,1,vv,0,&err) - eval_expr_at2(r2e,u,1,vv,0,&err) - C2;
   double B2 = eval_expr_at2(l2e,u,0,vv,1,&err) - eval_expr_at2(r2e,u,0,vv,1,&err) - C2;
+  if (err) {
+    SOL_PRINTF("Error: Invalid expression.\n");
+    return 1;
+  }
 
   double det = A1*B2 - A2*B1;
   if (fabs(det) < 1e-12) {
@@ -647,8 +683,89 @@ int solve_system(const char *line) {
   double uval = (-(C1)*B2 - B1*(-(C2))) / det; /* solve A1 u + B1 v = -C1 */
   /* Actually using Cramer's: u = (-C1*B2 - B1*(-C2))/det */
   double vval = (A1*(-(C2)) - (-(C1))*A2) / det;
-  set_variable((char*)u, uval);
-  set_variable((char*)vv, vval);
   SOL_PRINTF("%s = %.6g, %s = %.6g\n", u, uval, vv, vval);
   return 0;
+}
+
+static int span_is_identifier(const char *s, const char *end) {
+  while (s < end && isspace((unsigned char)*s)) s++;
+  if (s >= end || !isalpha((unsigned char)*s)) return 0;
+  s++;
+  while (s < end && isalnum((unsigned char)*s)) s++;
+  while (s < end && isspace((unsigned char)*s)) s++;
+  return s == end;
+}
+
+int line_is_linear_system(const char *line) {
+  const char *semi = strchr(line, ';');
+  if (!semi || strchr(semi + 1, ';')) return 0;
+  const char *eq1 = memchr(line, '=', (size_t)(semi - line));
+  const char *eq2 = strchr(semi + 1, '=');
+  if (!eq1 || !eq2) return 0;
+  /* Plain assignments (x=1; y=2) stay separate statements. */
+  if (span_is_identifier(line, eq1) || span_is_identifier(semi + 1, eq2)) return 0;
+  return 1;
+}
+
+static int parse_function_def(const char *token, char *name, char *param, const char **expr_out) {
+  const char *po = strchr(token, '(');
+  const char *pc = strchr(token, ')');
+  const char *eq = strchr(token, '=');
+  if (!po || !pc || !eq || !(po < pc && pc < eq)) return 0;
+  int n = 0;
+  const char *p = token;
+  while (p < po) {
+    if (!isspace((unsigned char)*p)) {
+      if (!isalnum((unsigned char)*p) || n >= VAR_NAME_LEN - 1) return 0;
+      name[n++] = *p;
+    }
+    p++;
+  }
+  name[n] = '\0';
+  if (n == 0 || isdigit((unsigned char)name[0]) || is_function_name(name)) return 0;
+  int m = 0;
+  p = po + 1;
+  while (p < pc) {
+    if (!isspace((unsigned char)*p)) {
+      if (!isalnum((unsigned char)*p) || m >= VAR_NAME_LEN - 1) return 0;
+      param[m++] = *p;
+    }
+    p++;
+  }
+  param[m] = '\0';
+  if (m == 0 || isdigit((unsigned char)param[0])) return 0;
+  *expr_out = eq + 1;
+  return 1;
+}
+
+static void format_result(CalcResult res) {
+  if (res.error == 1) SOL_PRINTF("Error: Division by zero.\n");
+  else if (res.error == 2) SOL_PRINTF("Error: Invalid Operator.\n");
+  else if (res.error == 3) SOL_PRINTF("Error: Invalid expression.\n");
+  else if (res.error == 4) SOL_PRINTF("Error: Unknown variable.\n");
+  else if (res.error == 5) SOL_PRINTF("Error: Invalid assignment.\n");
+  else if (res.error == 6) SOL_PRINTF("Error: Invalid Argument.\n");
+  else if (!isfinite(res.result)) SOL_PRINTF("Error: Invalid Argument.\n");
+  else SOL_PRINTF("= %.6g\n", res.result);
+}
+
+void eval_dispatch(const char *token) {
+  solve_output[0] = '\0';
+  char name[VAR_NAME_LEN], param[VAR_NAME_LEN];
+  const char *expr = NULL;
+  if (parse_function_def(token, name, param, &expr)) {
+    set_function(name, param, (char *)expr);
+    SOL_PRINTF("Defined function %s(%s)\n", name, param);
+    return;
+  }
+  const char *eq = strchr(token, '=');
+  if (eq && span_is_identifier(token, eq)) {
+    format_result(evaluate_expression(token));
+    return;
+  }
+  if (eq) {
+    solve_equation(token);
+    return;
+  }
+  format_result(evaluate_expression(token));
 }

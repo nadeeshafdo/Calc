@@ -5,6 +5,7 @@
 #include <conio.h>
 #include <windows.h>
 #else
+#include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -423,9 +424,14 @@ static char **tui_history = NULL;
 static int tui_hist_count = 0, tui_hist_cap = 0, tui_hist_idx = 0;
 
 static void tui_log_add(const char *s) {
+  if (tui_log_count >= 400 && tui_log_count > 0) {
+    free(tui_log[0]);
+    memmove(tui_log, tui_log + 1, (size_t)(tui_log_count - 1) * sizeof(char *));
+    tui_log_count--;
+  }
   if (tui_log_count >= tui_log_cap) {
     int nc = tui_log_cap ? tui_log_cap * 2 : 64;
-    char **tmp = realloc(tui_log, nc * sizeof(char *));
+    char **tmp = realloc(tui_log, (size_t)nc * sizeof(char *));
     if (!tmp) return;
     tui_log = tmp;
     tui_log_cap = nc;
@@ -433,6 +439,11 @@ static void tui_log_add(const char *s) {
   tui_log[tui_log_count] = malloc(strlen(s) + 1);
   if (tui_log[tui_log_count]) strcpy(tui_log[tui_log_count], s);
   tui_log_count++;
+}
+
+static void tui_log_clear(void) {
+  for (int i = 0; i < tui_log_count; i++) free(tui_log[i]);
+  tui_log_count = 0;
 }
 
 static void tui_history_add(const char *s) {
@@ -444,9 +455,15 @@ static void tui_history_add(const char *s) {
     tui_hist_cap = nc;
   }
   if (tui_hist_count > 0 && strcmp(tui_history[tui_hist_count - 1], s) == 0) return;
+  if (tui_hist_count >= HISTORY_MAX) {
+    free(tui_history[0]);
+    memmove(tui_history, tui_history + 1, (size_t)(tui_hist_count - 1) * sizeof(char *));
+    tui_hist_count--;
+  }
   tui_history[tui_hist_count] = malloc(strlen(s) + 1);
   if (tui_history[tui_hist_count]) strcpy(tui_history[tui_hist_count], s);
   tui_hist_count++;
+  tui_hist_idx = tui_hist_count;
 }
 
 static void tui_get_size(void) {
@@ -483,13 +500,46 @@ static void tui_clear(void) {
 /* process a single command token, log output */
 static void tui_process_token(char *token);
 
+static void tui_log_text(const char *s) {
+  if (!s || !s[0]) {
+    tui_log_add("No output.");
+    return;
+  }
+  const char *p = s;
+  while (*p) {
+    const char *nl = strchr(p, '\n');
+    char buf[BUFFER_SIZE];
+    size_t n = nl ? (size_t)(nl - p) : strlen(p);
+    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+    if (n > 0) {
+      memcpy(buf, p, n);
+      buf[n] = '\0';
+      tui_log_add(buf);
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+}
+
 static void tui_process_line(const char *line) {
+  if (line_is_linear_system(line)) {
+    char shown[BUFFER_SIZE + 16];
+    snprintf(shown, sizeof(shown), "calc> %s", line);
+    tui_log_add(shown);
+    solve_system(line);
+    tui_log_text(solve_output);
+    return;
+  }
   char work[BUFFER_SIZE];
   strncpy(work, line, BUFFER_SIZE - 1);
   work[BUFFER_SIZE - 1] = 0;
   char *tok = strtok(work, ";");
   while (tok) {
     while (isspace((unsigned char)*tok)) tok++;
+    if (*tok == '\0') {
+      tok = strtok(NULL, ";");
+      continue;
+    }
     char *end = tok + strlen(tok) - 1;
     while (end > tok && isspace((unsigned char)*end)) end--;
     *(end + 1) = 0;
@@ -582,6 +632,13 @@ static void tui_process_token(char *token) {
     }
     /* trim expr spaces */
     char *p=expr; while(isspace((unsigned char)*p)) p++;
+    char *tend = p + strlen(p);
+    while (tend > p && isspace((unsigned char)tend[-1])) tend--;
+    *tend = '\0';
+    if (xmax <= xmin || ymax <= ymin) {
+      tui_log_add("Error: plot range must be xmin < xmax and ymin < ymax.");
+      return;
+    }
     /* store */
     strncpy(tui_graph_expr, p, BUFFER_SIZE-1); tui_graph_expr[BUFFER_SIZE-1]=0;
     /* if expr is just a function name, keep; plotting uses tui_graph_expr */
@@ -591,96 +648,17 @@ static void tui_process_token(char *token) {
     snprintf(buf,sizeof(buf),"Plotting: %s  x:[%.3g,%.3g] y:[%.3g,%.3g]", tui_graph_expr, xmin,xmax,ymin,ymax);
     tui_log_add(buf);
   } else {
-    /* function def? */
-    char *po = strchr(token, '(');
-    char *pc = strchr(token, ')');
-    char *eq = strchr(token, '=');
-    if (po && pc && eq && po < pc && pc < eq) {
-      char name[VAR_NAME_LEN], param[VAR_NAME_LEN];
-      int valid=1, n=0,m=0;
-      char *p=token;
-      while (p < po) {
-        if (!isspace((unsigned char)*p)) {
-          if (!isalnum((unsigned char)*p)) valid=0;
-          if (n < VAR_NAME_LEN-1) name[n++]=*p; else valid=0;
-        }
-        p++;
-      }
-      name[n]=0;
-      if (n==0) valid=0;
-      if (n>0 && isdigit((unsigned char)name[0])) valid=0;
-      if (valid && is_function_name(name)) valid=0;
-      p=po+1;
-      while (p < pc) {
-        if (!isspace((unsigned char)*p)) {
-          if (!isalnum((unsigned char)*p)) valid=0;
-          if (m < VAR_NAME_LEN-1) param[m++]=*p; else valid=0;
-        }
-        p++;
-      }
-      param[m]=0;
-      if (m==0) valid=0;
-      if (m>0 && isdigit((unsigned char)param[0])) valid=0;
-      if (valid) {
-        set_function(name, param, eq+1);
-        char buf[BUFFER_SIZE]; snprintf(buf,sizeof(buf),"Defined function %s(%s)",name,param);
-        tui_log_add(buf);
-      } else {
-        tui_log_add("Error: Invalid function definition.");
-      }
-    } else if (eq) {
-      /* assignment or equation */
-      /* simple var assignment? */
-      int len = (int)(eq - token);
-      char lhs[BUFFER_SIZE];
-      int k=0,j=0,valid=1;
-      while (j < len && isspace((unsigned char)token[j])) j++;
-      if (j < len && isalpha((unsigned char)token[j])) {
-        while (j < len && isalnum((unsigned char)token[j]) && k < VAR_NAME_LEN-1) lhs[k++]=token[j++];
-        lhs[k]=0;
-        while (j < len && isspace((unsigned char)token[j])) j++;
-        if (j != len) valid=0;
-      } else valid=0;
-      if (valid) {
-        CalcResult rhs = evaluate_expression(eq+1);
-        if (rhs.error==0) set_variable(lhs, rhs.result);
-        char buf[BUFFER_SIZE];
-        if (rhs.error==1) snprintf(buf,sizeof(buf),"Error: Division by zero.");
-        else if (rhs.error==2) snprintf(buf,sizeof(buf),"Error: Invalid Operator.");
-        else if (rhs.error==3) snprintf(buf,sizeof(buf),"Error: Invalid expression.");
-        else if (rhs.error==4) snprintf(buf,sizeof(buf),"Error: Unknown variable.");
-        else if (rhs.error==5) snprintf(buf,sizeof(buf),"Error: Invalid assignment.");
-        else if (rhs.error==6) snprintf(buf,sizeof(buf),"Error: Invalid Argument.");
-        else snprintf(buf,sizeof(buf),"= %.6g", rhs.result);
-        tui_log_add(buf);
-      } else {
-        if (strchr(token, ';')) solve_system(token);
-        else solve_equation(token);
-        char *line = strtok(solve_output, "\n");
-        while (line) {
-          tui_log_add(line);
-          line = strtok(NULL, "\n");
-        }
-        if (solve_output[0] == 0) tui_log_add("No output.");
-      }
-    } else {
-      CalcResult res = evaluate_expression(token);
-      char buf[BUFFER_SIZE];
-      if (res.error==1) snprintf(buf,sizeof(buf),"Error: Division by zero.");
-      else if (res.error==2) snprintf(buf,sizeof(buf),"Error: Invalid Operator.");
-      else if (res.error==3) snprintf(buf,sizeof(buf),"Error: Invalid expression.");
-      else if (res.error==4) snprintf(buf,sizeof(buf),"Error: Unknown variable.");
-      else if (res.error==5) snprintf(buf,sizeof(buf),"Error: Invalid assignment.");
-      else if (res.error==6) snprintf(buf,sizeof(buf),"Error: Invalid Argument.");
-      else snprintf(buf,sizeof(buf),"= %.6g", res.result);
-      tui_log_add(buf);
-    }
+    eval_dispatch(token);
+    tui_log_text(solve_output);
   }
 }
 
 /* Braille graph rendering */
 static void tui_draw_graph(int r0, int c0, int w, int h) {
-  if (w < 4 || h < 4) return;
+  if (w < 4 || h < 5) return;
+  if (!(tui_gxmax > tui_gxmin) || !(tui_gymax > tui_gymin)) return;
+  /* Reserve the top row for the numeric range label. */
+  h -= 1;
   int Wp = w * 2;
   int Hp = h * 4;
   /* pixel buffer */
@@ -701,17 +679,21 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
   if (is_user_function_defined(name)) {
     get_function_expr(name, param, expr);
   } else {
-    strcpy(expr, tui_graph_expr);
-    strcpy(param, "x");
+    strncpy(expr, tui_graph_expr, BUFFER_SIZE - 1);
+    expr[BUFFER_SIZE - 1] = '\0';
+    strncpy(param, "x", VAR_NAME_LEN - 1);
+    param[VAR_NAME_LEN - 1] = '\0';
   }
+  double old_param_val = 0;
+  int had_param = get_variable(param, &old_param_val);
   /* sample */
   int prev_py = -1;
   int prev_valid = 0;
   for (int px = 0; px < Wp; px++) {
     double x = tui_gxmin + (double)px / (double)(Wp - 1) * (tui_gxmax - tui_gxmin);
     set_variable(param, x);
-    CalcResult res = evaluate_expression(expr);
-    if (res.error) { prev_valid = 0; continue; }
+    CalcResult res = solve_math(expr);
+    if (res.error || !isfinite(res.result)) { prev_valid = 0; continue; }
     double yval = res.result;
     int py = (int)((tui_gymax - yval) / (tui_gymax - tui_gymin) * (Hp - 1));
     if (py < 0) py = 0;
@@ -720,13 +702,15 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     if (prev_valid) {
       int a = prev_py, b = py;
       if (a > b) { int t=a; a=b; b=t; }
-      for (int yy = a; yy <= b; yy++) SETPX(px-1 < 0 ? 0 : px-1, yy);
-      /* vertical line at current column between prev and cur */
       for (int yy = a; yy <= b; yy++) SETPX(px, yy);
     }
     prev_py = py;
     prev_valid = 1;
   }
+  if (had_param)
+    set_variable(param, old_param_val);
+  else
+    unset_variable(param);
   /* axes */
   if (tui_gxmin <= 0 && tui_gxmax >= 0) {
     int ax = (int)((0 - tui_gxmin) / (tui_gxmax - tui_gxmin) * (Wp - 1));
@@ -740,10 +724,9 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     if (ay >= Hp) ay = Hp - 1;
     for (int px = 0; px < Wp; px++) SETPX(px, ay);
   }
-  /* restore param if needed */
   /* render braille cells */
   for (int cy = 0; cy < h; cy++) {
-    tui_move(r0 + cy, c0);
+    tui_move(r0 + 1 + cy, c0);
     for (int cx = 0; cx < w; cx++) {
       int mask = 0;
       for (int dy = 0; dy < 4; dy++) {
@@ -769,11 +752,9 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     }
   }
   free(pix);
-  /* corner labels */
+#undef SETPX
   tui_move(r0, c0);
-  printf("x:[%.2g,%.2g]", tui_gxmin, tui_gxmax);
-  tui_move(r0 + h - 1, c0);
-  printf("y:[%.2g,%.2g]", tui_gymin, tui_gymax);
+  printf("x:[%.3g,%.3g] y:[%.3g,%.3g]", tui_gxmin, tui_gxmax, tui_gymin, tui_gymax);
 }
 
 static void tui_render(void) {
@@ -785,8 +766,10 @@ static void tui_render(void) {
   /* keybinds right */
   const char *hints = "Ctrl-H:Help | Ctrl-L:Clear | Ctrl-G:Graph | Ctrl-C:Quit";
   int hl = (int)strlen(hints);
-  tui_move(1, tui_cols - hl + 1);
-  printf("\033[7m%s\033[0m", hints);
+  if (hl + 2 < tui_cols) {
+    tui_move(1, tui_cols - hl + 1);
+    printf("\033[7m%s\033[0m", hints);
+  }
 
   int left_w = tui_cols * 45 / 100;
   int right_w = tui_cols - left_w - 1;
@@ -804,8 +787,11 @@ static void tui_render(void) {
     if (idx < tui_log_count && tui_log[idx]) {
       /* truncate */
       char buf[256];
-      strncpy(buf, tui_log[idx], left_w - 1);
-      buf[left_w - 1] = 0;
+      int max_len = left_w - 1;
+      if (max_len < 0) max_len = 0;
+      if (max_len > (int)sizeof(buf) - 1) max_len = (int)sizeof(buf) - 1;
+      strncpy(buf, tui_log[idx], (size_t)max_len);
+      buf[max_len] = '\0';
       printf("%s", buf);
     }
   }
@@ -814,9 +800,11 @@ static void tui_render(void) {
   tui_move(panel_row, 1);
   printf("vars:%d funcs:%d", var_count, func_count);
   /* list a few */
-  for (int i = 0; i < var_count && i < 3; i++) {
-    tui_move(panel_row + 1 + i, 1);
+  int shown = 0;
+  for (int i = var_count - 1; i >= 0 && shown < 3; i--) {
+    tui_move(panel_row + 1 + shown, 1);
     printf("%s=%.4g", variables[i].name, variables[i].value);
+    shown++;
   }
 
   /* right pane */
@@ -843,14 +831,12 @@ static void tui_render(void) {
 
   /* input bar */
   tui_move(tui_rows, 1);
-  printf("calc> ");
-  /* print input */
-  /* simple: print buffer */
-  printf("%s", tui_input);
-  /* move cursor */
+  printf("\033[2Kcalc> %s", tui_input);
+  printf("\033[?25h");
   tui_move(tui_rows, 7 + tui_input_pos);
   fflush(stdout);
 }
+
 
 static void tui_enable_raw(void) {
 #ifdef _WIN32
@@ -861,99 +847,155 @@ static void tui_enable_raw(void) {
     SetConsoleMode(hOut, mode);
   }
   SetConsoleOutputCP(CP_UTF8);
-  /* input */
   HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
   if (GetConsoleMode(hIn, &mode)) {
     mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
     SetConsoleMode(hIn, mode);
   }
 #else
-  /* reuse enableRawMode? call termios */
   struct termios raw;
   tcgetattr(STDIN_FILENO, &raw);
   raw.c_lflag &= ~(ECHO | ICANON | ISIG);
+  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VTIME] = 1; /* 0.1s timeout for escape sequences */
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 #endif
 }
 
 static void tui_disable_raw(void) {
 #ifdef _WIN32
-  /* no-op restore minimal */
+  /* Windows console state is restored on process exit by the OS. */
 #else
-  /* restore cooked not tracked; exit anyway */
+  struct termios cooked;
+  if (tcgetattr(STDIN_FILENO, &cooked) == 0) {
+    cooked.c_lflag |= (ECHO | ICANON | ISIG);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &cooked);
+  }
+#endif
+}
+
+static void tui_restore_screen(void) {
+  fputs("\033[?25h\033[?1049l", stdout);
+  fflush(stdout);
+  tui_disable_raw();
+}
+
+static void tui_on_exit(void) {
+  tui_restore_screen();
+}
+
+static int tui_read_key(void) {
+#ifdef _WIN32
+  int c = _getch();
+  if (c == 0 || c == 0xE0) {
+    int next = _getch();
+    if (next == 72) return 1000; /* up */
+    if (next == 80) return 1001; /* down */
+    if (next == 77) return 1002; /* right */
+    if (next == 75) return 1003; /* left */
+    if (next == 83) return 1004; /* delete */
+    return -1;
+  }
+  return c;
+#else
+  unsigned char ch;
+  if (read(STDIN_FILENO, &ch, 1) != 1) return -1;
+  int c = ch;
+  if (c == 27) {
+    /* Use a short poll so a lone Esc does not hang forever. */
+    struct pollfd pfd = { STDIN_FILENO, POLLIN, 0 };
+    if (poll(&pfd, 1, 30) <= 0) return 27;
+    char seq[2];
+    if (read(STDIN_FILENO, &seq[0], 1) != 1) return 27;
+    if (seq[0] != '[') return 27;
+    if (poll(&pfd, 1, 10) <= 0) return 27;
+    if (read(STDIN_FILENO, &seq[1], 1) != 1) return 27;
+    if (seq[1] == 'A') return 1000;
+    if (seq[1] == 'B') return 1001;
+    if (seq[1] == 'C') return 1002;
+    if (seq[1] == 'D') return 1003;
+    /* Handle ESC [ 3 ~ (Delete) */
+    if (seq[1] == '3') {
+      char tilde;
+      if (read(STDIN_FILENO, &tilde, 1) == 1 && tilde == '~') return 1004;
+    }
+    return 27;
+  }
+  return c;
 #endif
 }
 
 void run_tui(void) {
   tui_enable_raw();
-  /* alternate screen */
+  atexit(tui_on_exit);
   fputs("\033[?1049h\033[?25l", stdout);
   fflush(stdout);
   tui_log_add("Calc " VERSION " (c) 2025 nadeeshafdo");
-  tui_log_add("TUI mode. Ctrl-H help, Ctrl-G graph nav, Ctrl-C quit.");
+  tui_log_add("TUI mode. F1/help, Ctrl-G graph nav, Ctrl-C quit.");
 
-  /* initial graph */
   tui_has_graph = 1;
 
   int running = 1;
   while (running) {
     tui_render();
-#ifdef _WIN32
-    int c = _getch();
-#else
-    unsigned char ch;
-    if (read(STDIN_FILENO, &ch, 1) != 1) break;
-    int c = ch;
-    if (c == 27) {
-      /* escape sequence */
-      char seq[2];
-      if (read(STDIN_FILENO, &seq[0], 1) == 1 && read(STDIN_FILENO, &seq[1], 1) == 1) {
-        if (seq[0] == '[') {
-          if (seq[1] == 'A') c = 1000; /* up */
-          else if (seq[1] == 'B') c = 1001; /* down */
-          else if (seq[1] == 'C') c = 1002; /* right */
-          else if (seq[1] == 'D') c = 1003; /* left */
-        }
-      } else {
-        c = 27;
-      }
-    }
-#endif
+    int c = tui_read_key();
+    if (c == -1) continue;
+
     if (tui_graph_nav) {
-      if (c == 27 || c == 7) { tui_graph_nav = 0; continue; } /* Esc or Ctrl-G */
-      if (c == '+' || c == '=') { double cx=(tui_gxmin+tui_gxmax)/2; double hw=(tui_gxmax-tui_gxmin)*0.4; tui_gxmin=cx-hw; tui_gxmax=cx+hw; double ch2=(tui_gymax-tui_gymin)*0.4; double cy=(tui_gymin+tui_gymax)/2; tui_gymin=cy-ch2; tui_gymax=cy+ch2; }
-      else if (c == '-') { double cx=(tui_gxmin+tui_gxmax)/2; double hw=(tui_gxmax-tui_gxmin)*1.25; tui_gxmin=cx-hw; tui_gxmax=cx+hw; double ch2=(tui_gymax-tui_gymin)*1.25; double cy=(tui_gymin+tui_gymax)/2; tui_gymin=cy-ch2; tui_gymax=cy+ch2; }
-      else if (c == 1000 || c == 1003) { /* up/left pan */ 
-        if (c == 1000) { double d=(tui_gymax-tui_gymin)*0.1; tui_gymin+=d; tui_gymax+=d; }
-        else { double d=(tui_gxmax-tui_gxmin)*0.1; tui_gxmin-=d; tui_gxmax-=d; }
+      if (c == 27 || c == 7) { tui_graph_nav = 0; continue; }
+      if (c == '+' || c == '=') {
+        double cx = (tui_gxmin + tui_gxmax) / 2.0;
+        double hw = (tui_gxmax - tui_gxmin) * 0.4;
+        if (hw < 1e-6) hw = 1e-6;
+        tui_gxmin = cx - hw; tui_gxmax = cx + hw;
+        double cy = (tui_gymin + tui_gymax) / 2.0;
+        double ch2 = (tui_gymax - tui_gymin) * 0.4;
+        if (ch2 < 1e-6) ch2 = 1e-6;
+        tui_gymin = cy - ch2; tui_gymax = cy + ch2;
+      } else if (c == '-') {
+        double cx = (tui_gxmin + tui_gxmax) / 2.0;
+        double hw = (tui_gxmax - tui_gxmin) * 1.25;
+        tui_gxmin = cx - hw; tui_gxmax = cx + hw;
+        double cy = (tui_gymin + tui_gymax) / 2.0;
+        double ch2 = (tui_gymax - tui_gymin) * 1.25;
+        tui_gymin = cy - ch2; tui_gymax = cy + ch2;
+      } else if (c == 1000) {
+        double d = (tui_gymax - tui_gymin) * 0.1;
+        tui_gymin += d; tui_gymax += d;
+      } else if (c == 1001) {
+        double d = (tui_gymax - tui_gymin) * 0.1;
+        tui_gymin -= d; tui_gymax -= d;
+      } else if (c == 1003) {
+        double d = (tui_gxmax - tui_gxmin) * 0.1;
+        tui_gxmin -= d; tui_gxmax -= d;
+      } else if (c == 1002) {
+        double d = (tui_gxmax - tui_gxmin) * 0.1;
+        tui_gxmin += d; tui_gxmax += d;
+      } else if (c == 'r') {
+        tui_gxmin = -10; tui_gxmax = 10; tui_gymin = -10; tui_gymax = 10;
       }
-      else if (c == 1001 || c == 1002) {
-        if (c == 1001) { double d=(tui_gymax-tui_gymin)*0.1; tui_gymin-=d; tui_gymax-=d; }
-        else { double d=(tui_gxmax-tui_gxmin)*0.1; tui_gxmin+=d; tui_gxmax+=d; }
-      }
-      else if (c == 'r') { tui_gxmin=-10; tui_gxmax=10; tui_gymin=-10; tui_gymax=10; }
       continue;
     }
 
     if (c == 3) { running = 0; break; } /* Ctrl-C */
     if (c == 7) { tui_graph_nav = 1; continue; } /* Ctrl-G */
-    if (c == 8) { tui_help = !tui_help; continue; } /* Ctrl-H */
-    if (c == 12) { /* Ctrl-L clear log */
-      tui_log_count = 0;
-      continue;
-    }
+#ifndef _WIN32
+    if (c == 8) { tui_help = !tui_help; continue; } /* Ctrl-H (POSIX) */
+#endif
+    if (c == 11) { tui_help = !tui_help; continue; } /* Ctrl-K fallback help on all platforms */
+    if (c == 12) { tui_log_clear(); continue; } /* Ctrl-L */
     if (c == '\r' || c == '\n') {
       tui_input[tui_input_len] = 0;
       if (tui_input_len > 0) {
         tui_history_add(tui_input);
-        if (strcmp(tui_input, "exit")==0 || strcmp(tui_input, "quit")==0) { running=0; break; }
+        if (strcmp(tui_input, "exit") == 0 || strcmp(tui_input, "quit") == 0) { running = 0; break; }
         tui_process_line(tui_input);
       }
       tui_input_len = 0; tui_input_pos = 0;
       tui_input[0] = 0;
       continue;
     }
-    if (c == 127 || c == 8) {
+    if (c == 127 || c == 8) { /* Backspace */
       if (tui_input_pos > 0) {
         memmove(tui_input + tui_input_pos - 1, tui_input + tui_input_pos, tui_input_len - tui_input_pos);
         tui_input_pos--; tui_input_len--;
@@ -961,15 +1003,17 @@ void run_tui(void) {
       }
       continue;
     }
-    if (c == 1003) { /* left */
-      if (tui_input_pos > 0) tui_input_pos--;
+    if (c == 1004) { /* Delete */
+      if (tui_input_pos < tui_input_len) {
+        memmove(tui_input + tui_input_pos, tui_input + tui_input_pos + 1, tui_input_len - tui_input_pos - 1);
+        tui_input_len--;
+        tui_input[tui_input_len] = 0;
+      }
       continue;
     }
-    if (c == 1002) { /* right */
-      if (tui_input_pos < tui_input_len) tui_input_pos++;
-      continue;
-    }
-    if (c == 1000) { /* up history */
+    if (c == 1003) { if (tui_input_pos > 0) tui_input_pos--; continue; }
+    if (c == 1002) { if (tui_input_pos < tui_input_len) tui_input_pos++; continue; }
+    if (c == 1000) {
       if (tui_hist_count > 0) {
         if (tui_hist_idx > 0) tui_hist_idx--;
         strcpy(tui_input, tui_history[tui_hist_idx]);
@@ -978,7 +1022,7 @@ void run_tui(void) {
       }
       continue;
     }
-    if (c == 1001) { /* down history */
+    if (c == 1001) {
       if (tui_hist_idx < tui_hist_count - 1) {
         tui_hist_idx++;
         strcpy(tui_input, tui_history[tui_hist_idx]);
@@ -986,11 +1030,10 @@ void run_tui(void) {
         tui_input_pos = tui_input_len;
       } else {
         tui_hist_idx = tui_hist_count;
-        tui_input[0]=0; tui_input_len=0; tui_input_pos=0;
+        tui_input[0] = 0; tui_input_len = 0; tui_input_pos = 0;
       }
       continue;
     }
-    /* printable */
     if (c >= 32 && c < 127 && tui_input_len < BUFFER_SIZE - 2) {
       memmove(tui_input + tui_input_pos + 1, tui_input + tui_input_pos, tui_input_len - tui_input_pos);
       tui_input[tui_input_pos] = (char)c;
@@ -999,8 +1042,6 @@ void run_tui(void) {
     }
   }
 
-  /* restore */
-  fputs("\033[?25h\033[?1049l", stdout);
-  fflush(stdout);
-  tui_disable_raw();
+  tui_restore_screen();
 }
+
