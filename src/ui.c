@@ -536,6 +536,10 @@ static void tui_process_line(const char *line) {
   char *tok = strtok(work, ";");
   while (tok) {
     while (isspace((unsigned char)*tok)) tok++;
+    if (*tok == '\0') {
+      tok = strtok(NULL, ";");
+      continue;
+    }
     char *end = tok + strlen(tok) - 1;
     while (end > tok && isspace((unsigned char)*end)) end--;
     *(end + 1) = 0;
@@ -680,8 +684,8 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     strncpy(param, "x", VAR_NAME_LEN - 1);
     param[VAR_NAME_LEN - 1] = '\0';
   }
-  double saved_param = 0;
-  int had_param = get_variable(param, &saved_param);
+  double old_param_val = 0;
+  int had_param = get_variable(param, &old_param_val);
   /* sample */
   int prev_py = -1;
   int prev_valid = 0;
@@ -703,6 +707,10 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     prev_py = py;
     prev_valid = 1;
   }
+  if (had_param)
+    set_variable(param, old_param_val);
+  else
+    unset_variable(param);
   /* axes */
   if (tui_gxmin <= 0 && tui_gxmax >= 0) {
     int ax = (int)((0 - tui_gxmin) / (tui_gxmax - tui_gxmin) * (Wp - 1));
@@ -716,8 +724,6 @@ static void tui_draw_graph(int r0, int c0, int w, int h) {
     if (ay >= Hp) ay = Hp - 1;
     for (int px = 0; px < Wp; px++) SETPX(px, ay);
   }
-  if (had_param) set_variable(param, saved_param);
-  else unset_variable(param);
   /* render braille cells */
   for (int cy = 0; cy < h; cy++) {
     tui_move(r0 + 1 + cy, c0);
@@ -781,8 +787,11 @@ static void tui_render(void) {
     if (idx < tui_log_count && tui_log[idx]) {
       /* truncate */
       char buf[256];
-      strncpy(buf, tui_log[idx], left_w - 1);
-      buf[left_w - 1] = 0;
+      int max_len = left_w - 1;
+      if (max_len < 0) max_len = 0;
+      if (max_len > (int)sizeof(buf) - 1) max_len = (int)sizeof(buf) - 1;
+      strncpy(buf, tui_log[idx], (size_t)max_len);
+      buf[max_len] = '\0';
       printf("%s", buf);
     }
   }

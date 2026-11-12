@@ -539,6 +539,14 @@ static int get_all_variables(const char *expr, int max_vars, char var_names[][VA
   return count;
 }
 
+/* Collect all non-constant, non-function identifiers regardless of whether
+   they were previously assigned. Excludes built-in constants pi, e, tau, phi.
+   Used for equation solving when LHS is not a simple assignment, so that a
+   user-defined x is still detected as the equation variable. */
+int get_equation_variables(const char *expr, int max_vars, char var_names[][VAR_NAME_LEN]) {
+  return get_all_variables(expr, max_vars, var_names);
+}
+
 int solve_equation(const char *expr) {
   solve_output[0]=0;
   const char *eq = strchr(expr, '=');
@@ -552,7 +560,7 @@ int solve_equation(const char *expr) {
   char unknowns[8][VAR_NAME_LEN];
   int nunk = get_unknown_variables(expr, 8, unknowns);
   if (nunk != 1) {
-    nunk = get_all_variables(expr, 8, unknowns);
+    nunk = get_equation_variables(expr, 8, unknowns);
   }
   if (nunk != 1) {
     SOL_PRINTF("Error: expected 1 unknown variable.\n");
@@ -627,7 +635,7 @@ int solve_system(const char *line) {
   char unknowns[4][VAR_NAME_LEN];
   int nunk = get_unknown_variables(line, 4, unknowns);
   if (nunk != 2) {
-    nunk = get_all_variables(line, 4, unknowns);
+    nunk = get_equation_variables(line, 4, unknowns);
   }
   if (nunk != 2) {
     SOL_PRINTF("Error: expected 2 unknowns.\n");

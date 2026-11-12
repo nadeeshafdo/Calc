@@ -36,6 +36,10 @@ int main(void) {
       char *tok = strtok(work, ";");
       while (tok != NULL) {
         while (isspace((unsigned char)*tok)) tok++;
+        if (*tok == '\0') {
+          tok = strtok(NULL, ";");
+          continue;
+        }
         char *end = tok + strlen(tok) - 1;
         while (end > tok && isspace((unsigned char)*end)) end--;
         *(end + 1) = '\0';
