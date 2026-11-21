@@ -102,25 +102,33 @@ int main() {
           char param[VAR_NAME_LEN];
 
           int valid = 1;
-          // Name
+          // Name: [A-Za-z_][A-Za-z0-9_]*
           int n = 0;
           char *p = token;
           while (p < paren_open) {
-            if (!isspace(*p))
+            if (!isspace((unsigned char)*p))
               name[n++] = *p;
             p++;
           }
           name[n] = '\0';
           if (n == 0)
             valid = 0;
+          else {
+            if (!IS_VAR_START(name[0]))
+              valid = 0;
+            for (int ti = 1; ti < n && valid; ti++) {
+              if (!IS_VAR_CHAR(name[ti]))
+                valid = 0;
+            }
+          }
 
-          // Param
+          // Param: single variable name
           int m = 0;
           p = paren_open + 1;
           while (p < paren_close) {
-            if (!isspace(*p)) {
-              if (!isalnum(*p))
-                valid = 0; // Only alphanumeric
+            if (!isspace((unsigned char)*p)) {
+              if (!IS_VAR_CHAR(*p))
+                valid = 0; // Only alphanumeric + underscore
               param[m++] = *p;
             }
             p++;
@@ -130,7 +138,7 @@ int main() {
             valid = 0;
 
           // Check if param starts with digit (invalid var)
-          if (isdigit(param[0]))
+          if (m > 0 && !IS_VAR_START(param[0]))
             valid = 0;
 
           if (valid) {
@@ -154,8 +162,9 @@ int main() {
           else if (res.error == 4)
             printf(COLOR_RED "Error: Unknown variable.\n" COLOR_RESET);
           else if (res.error == 5)
-            printf(COLOR_RED "Error: Invalid assignment (Var must be "
-                             "letters).\n" COLOR_RESET);
+            printf(COLOR_RED "Error: Invalid assignment (Var must start with "
+                             "a letter or underscore, followed by letters, "
+                             "digits, or underscores).\n" COLOR_RESET);
           else if (res.error == 6)
             printf(COLOR_RED
                    "Error: Invalid Argument (e.g. sqrt(-1)).\n" COLOR_RESET);

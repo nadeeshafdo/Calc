@@ -79,29 +79,29 @@ void normalize_expression(char *out, const char *in) {
     if (next == 0)
       break;
 
-    // Rule 1: ) followed by ( or number or letter -> Insert *
-    if (curr == ')' && (next == '(' || isalnum((unsigned char)next))) {
+    // Rule 1: ) followed by ( or number or letter/_ -> Insert *
+    if (curr == ')' && (next == '(' || IS_VAR_CHAR(next))) {
       out[j++] = '*';
     }
-    // Rule 2: number followed by ( or letter -> Insert *
+    // Rule 2: number followed by ( or letter/_ -> Insert *
     else if (isdigit((unsigned char)curr) &&
-             (next == '(' || isalpha((unsigned char)next))) {
+             (next == '(' || IS_VAR_START(next))) {
       out[j++] = '*';
     }
-    // Rule 2b: % (postfix percent) followed by number/letter/(/. -> Insert *
+    // Rule 2b: % (postfix percent) followed by number/letter/_/(/. -> Insert *
     // e.g. "500%25" -> "500%*25" so (500%) * 25 = 125
     else if (curr == '%' &&
-             (next == '(' || isalnum((unsigned char)next) || next == '.')) {
+             (next == '(' || IS_VAR_CHAR(next) || next == '.')) {
       out[j++] = '*';
     }
-    // Rule 3: letter followed by ( -> Insert * UNLESS it's a function
-    else if (isalpha(curr) && next == '(') {
+    // Rule 3: letter/_ followed by ( -> Insert * UNLESS it's a function
+    else if (IS_VAR_CHAR(curr) && next == '(') {
       // Check if the current word is a function name
       int k = 0;
       char word[32];
       // Backtrack to find the start of the word
       int start = i;
-      while (start > 0 && isalpha(in[start - 1]))
+      while (start > 0 && IS_VAR_CHAR(in[start - 1]))
         start--;
 
       // Copy the word
@@ -139,10 +139,10 @@ CalcResult solve_math(const char *raw_expr) {
       d_push(&values, val);
       i = end_ptr - expr;
       can_be_unary = 0;
-    } else if (isalpha(expr[i])) {
+    } else if (IS_VAR_START(expr[i])) {
       char var_name[VAR_NAME_LEN];
       int k = 0;
-      while (isalnum(expr[i]) && k < VAR_NAME_LEN - 1) {
+      while (IS_VAR_CHAR(expr[i]) && k < VAR_NAME_LEN - 1) {
         var_name[k++] = expr[i++];
       }
       var_name[k] = '\0';
@@ -311,10 +311,10 @@ int get_unknown_variables(const char *expr, int max_vars,
   int count = 0;
 
   while (clean_expr[i]) {
-    if (isalpha(clean_expr[i])) {
+    if (IS_VAR_START(clean_expr[i])) {
       char name[VAR_NAME_LEN];
       int k = 0;
-      while (isalnum(clean_expr[i]) && k < VAR_NAME_LEN - 1) {
+      while (IS_VAR_CHAR(clean_expr[i]) && k < VAR_NAME_LEN - 1) {
         name[k++] = clean_expr[i++];
       }
       name[k] = '\0';
@@ -363,13 +363,13 @@ CalcResult evaluate_expression(const char *expr) {
     char lhs_clean[BUFFER_SIZE];
     int k = 0, j = 0;
     int valid_assignment = 1;
-    while (j < len && isspace(expr[j]))
+    while (j < len && isspace((unsigned char)expr[j]))
       j++;
-    if (j < len && isalpha(expr[j])) {
-      while (j < len && isalnum(expr[j]) && k < VAR_NAME_LEN - 1)
+    if (j < len && IS_VAR_START(expr[j])) {
+      while (j < len && IS_VAR_CHAR(expr[j]) && k < VAR_NAME_LEN - 1)
         lhs_clean[k++] = expr[j++];
       lhs_clean[k] = '\0';
-      while (j < len && isspace(expr[j]))
+      while (j < len && isspace((unsigned char)expr[j]))
         j++;
       if (j != len)
         valid_assignment = 0;
