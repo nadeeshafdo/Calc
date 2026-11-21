@@ -345,6 +345,10 @@ void plot_function(const char *func_ref) {
   double max_y;
   int width = 60;
   int height = 20;
+  // Tie sample buffer to BUFFER_SIZE so future width bumps can't overflow.
+  // Width must stay within the buffer.
+  if (width > BUFFER_SIZE)
+    width = BUFFER_SIZE;
 
   double old_val_param;
   int had_param = get_variable(param, &old_val_param);
@@ -353,7 +357,7 @@ void plot_function(const char *func_ref) {
 
   // First pass: sample all columns to auto-scale Y to the data.
   // Fixed [-10,10] collapses e.g. sin(x) in [-1,1] into 1-2 rows.
-  double y_vals[256];
+  double y_vals[BUFFER_SIZE];
   double data_min = 0, data_max = 0;
   int valid_count = 0;
   double x_step = (max_x - min_x) / (width - 1);
