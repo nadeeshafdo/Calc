@@ -74,7 +74,7 @@ void add_to_history(const char *cmd) {
 }
 
 void print_banner() {
-  printf("Calc " VERSION " (c) 2025 nadeeshafdo\n");
+  printf("Calc " VERSION " (c) " BUILD_YEAR_STR " nadeeshafdo\n");
   printf("Type CTRL-C to quit, CTRL-H for help.\n\n");
 }
 
@@ -83,6 +83,7 @@ void print_help() {
   printf("Commands:\n");
   printf("  CTRL-C            Quit\n");
   printf("  CTRL-H            Show this help\n");
+  printf("  TAB               Auto-complete keyword / variable / function\n");
   printf("  exit, quit        Exit the calculator\n");
   printf("  unset <var>       Unset variable or function\n");
   printf("  vars              List all defined variables\n");
@@ -91,6 +92,11 @@ void print_help() {
   printf("\nOperators:\n");
   printf("  + - * / ^         Add, sub, mul, div, power\n");
   printf("  %%                 Percent: N%% = N/100, A%%B = A*B/100\n");
+  printf("  =                 Assign (x = 1) or test equality (1 = 1 -> 1)\n");
+  printf("\nBuiltins:\n");
+  printf("  pi, e             Math constants\n");
+  printf("  true, false       Boolean constants (1 and 0)\n");
+  printf("  sin cos tan sqrt log\n");
   printf("\nExamples:\n");
   printf("  2 + 3 * 4         Evaluate basic arithmetic\n");
   printf("  (10 - 2) / 4      Use parentheses for grouping\n");
@@ -98,11 +104,141 @@ void print_help() {
   printf("  500%%25             Percent of (500*25/100 = 125)\n");
   printf("  100 * 10%%          10%% of 100 = 10\n");
   printf("  x = 42            Assign a value to a variable\n");
+  printf("  1 = 1             Equality test -> 1 (true)\n");
   printf("  f(x) = x^2        Define a function\n");
   printf("  plot(f)           Plot the function f\n");
   printf("  plot(sin(x))      Plot an expression\n");
   printf("  vars              Show all currently stored variables\n");
   printf("\n");
+}
+
+// --- Tab completion ---
+static const char *completion_reserved[] = {"exit", "quit", "vars",
+                                            "funcs", "unset", "plot", NULL};
+static const char *completion_builtins[] = {"sin",  "cos",  "tan", "sqrt",
+                                            "log",  "pi",   "e",   "true",
+                                            "false", NULL};
+
+static int completion_has(char out[][VAR_NAME_LEN], int n, const char *s) {
+  for (int i = 0; i < n; i++) {
+    if (strcmp(out[i], s) == 0)
+      return 1;
+  }
+  return 0;
+}
+
+static void completion_add(char out[][VAR_NAME_LEN], int *n, int max_out,
+                           const char *s) {
+  if (*n >= max_out)
+    return;
+  if (s[0] == '\0')
+    return;
+  if (completion_has(out, *n, s))
+    return;
+  strncpy(out[*n], s, VAR_NAME_LEN - 1);
+  out[*n][VAR_NAME_LEN - 1] = '\0';
+  (*n)++;
+}
+
+int collect_completions(const char *prefix, char out[][VAR_NAME_LEN],
+                        int max_out) {
+  int n = 0;
+  size_t plen = strlen(prefix);
+  for (int i = 0; completion_reserved[i] && n < max_out; i++) {
+    if (strncmp(completion_reserved[i], prefix, plen) == 0)
+      completion_add(out, &n, max_out, completion_reserved[i]);
+  }
+  for (int i = 0; completion_builtins[i] && n < max_out; i++) {
+    if (strncmp(completion_builtins[i], prefix, plen) == 0)
+      completion_add(out, &n, max_out, completion_builtins[i]);
+  }
+  for (int i = 0; i < var_count && n < max_out; i++) {
+    if (strncmp(variables[i].name, prefix, plen) == 0)
+      completion_add(out, &n, max_out, variables[i].name);
+  }
+  for (int i = 0; i < func_count && n < max_out; i++) {
+    if (strncmp(functions[i].name, prefix, plen) == 0)
+      completion_add(out, &n, max_out, functions[i].name);
+    if (strncmp(functions[i].param, prefix, plen) == 0)
+      completion_add(out, &n, max_out, functions[i].param);
+  }
+  return n;
+}
+
+static void redraw_line(const char *buffer, int len, int pos) {
+  printf("\r" COLOR_BOLD COLOR_CYAN "calc> " COLOR_RESET "%s\033[K", buffer);
+  if (len > pos)
+    printf("\033[%dD", len - pos);
+  fflush(stdout);
+}
+
+// Complete the word fragment immediately before pos.
+static void handle_tab(char *buffer, int *len, int *pos) {
+  int s = *pos;
+  while (s > 0 && IS_VAR_CHAR(buffer[s - 1]))
+    s--;
+  int plen = *pos - s;
+  char prefix[VAR_NAME_LEN];
+  int copy = plen < VAR_NAME_LEN - 1 ? plen : VAR_NAME_LEN - 1;
+  memcpy(prefix, &buffer[s], copy);
+  prefix[copy] = '\0';
+
+  char matches[MAX_VARS + MAX_FUNCS + 16][VAR_NAME_LEN];
+  int nmatch =
+      collect_completions(prefix, matches, (int)(sizeof(matches) / sizeof(matches[0])));
+  if (nmatch <= 0) {
+    printf("\a");
+    fflush(stdout);
+    return;
+  }
+  if (nmatch == 1) {
+    const char *full = matches[0];
+    int flen = strlen(full);
+    int need = flen - plen;
+    if (need > 0 && *len + need < BUFFER_SIZE - 1) {
+      memmove(&buffer[*pos + need], &buffer[*pos], *len - *pos);
+      memcpy(&buffer[*pos], full + plen, need);
+      *len += need;
+      *pos += need;
+      buffer[*len] = '\0';
+    }
+    redraw_line(buffer, *len, *pos);
+    return;
+  }
+  // Multiple: extend by longest common prefix beyond what was typed.
+  int common = plen;
+  for (;; common++) {
+    char c = 0;
+    int ok = 1;
+    for (int i = 0; i < nmatch; i++) {
+      if ((int)strlen(matches[i]) <= common) {
+        ok = 0;
+        break;
+      }
+      if (i == 0)
+        c = matches[i][common];
+      else if (matches[i][common] != c) {
+        ok = 0;
+        break;
+      }
+    }
+    if (!ok)
+      break;
+    if (*len + 1 >= BUFFER_SIZE - 1)
+      break;
+    memmove(&buffer[*pos + 1], &buffer[*pos], *len - *pos);
+    buffer[*pos] = c;
+    (*len)++;
+    (*pos)++;
+    buffer[*len] = '\0';
+  }
+  redraw_line(buffer, *len, *pos);
+  // List candidates below, then restore the prompt line.
+  printf("\r\n");
+  for (int i = 0; i < nmatch; i++)
+    printf("%s  ", matches[i]);
+  printf("\r\n");
+  redraw_line(buffer, *len, *pos);
 }
 
 // The custom input function
@@ -272,6 +408,8 @@ void get_input_raw(char *buffer) {
           }
         }
       }
+    } else if (c == 9) { // TAB completion
+      handle_tab(buffer, &len, &pos);
     } else if (!iscntrl(c) && len < BUFFER_SIZE - 1) {
       memmove(&buffer[pos + 1], &buffer[pos], len - pos);
       buffer[pos] = c;
@@ -286,7 +424,9 @@ void get_input_raw(char *buffer) {
     }
 #else
     // Windows Simple Insert (Non-POSIX block)
-    if (c == '\r' || c == '\n') {
+    if (c == 9) { // TAB completion
+      handle_tab(buffer, &len, &pos);
+    } else if (c == '\r' || c == '\n') {
       buffer[len] = '\0';
       printf("\n");
       break;

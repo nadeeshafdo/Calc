@@ -21,7 +21,10 @@ if(NOT GIT_VERSION)
     set(GIT_VERSION "unknown")
 endif()
 
+string(TIMESTAMP BUILD_YEAR "%Y")
+
 add_compile_definitions(VERSION="${GIT_VERSION}")
+add_compile_definitions(BUILD_YEAR=${BUILD_YEAR})
 
 add_executable(calc
     src/main.c

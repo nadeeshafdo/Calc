@@ -26,17 +26,21 @@ int get_user_func_index(const char *name) {
 
 // --- Logic ---
 int precedence(char op) {
+  if (op == '=')
+    return 1; // Equality test (lowest, e.g. 1 = 1 -> 1)
   if (op == '+' || op == '-')
-    return 1;
-  if (op == '*' || op == '/' || op == '%')
     return 2;
-  if (op == '^')
+  if (op == '*' || op == '/' || op == '%')
     return 3;
+  if (op == '^')
+    return 4;
   return 0;
 }
 
 double apply_op(double a, double b, char op, int *error) {
   switch (op) {
+  case '=':
+    return (fabs(a - b) < 1e-9) ? 1.0 : 0.0;
   case '+':
     return a + b;
   case '-':
@@ -302,7 +306,7 @@ CalcResult solve_math(const char *raw_expr) {
         }
       }
 
-      while (ops.top != -1 &&
+      while (ops.top != -1 && c_peek(&ops) != '(' &&
              precedence(c_peek(&ops)) >= precedence(current_op)) {
         double val2 = d_pop(&values);
         double val1 = d_pop(&values);
@@ -397,26 +401,45 @@ CalcResult verify_result(const char *expr) {
 }
 
 CalcResult evaluate_expression(const char *expr) {
-  char *eq_sign = strchr(expr, '=');
+  // Find first '=' at paren depth 0 (ignore '=' inside parens).
+  const char *eq_sign = NULL;
+  int depth = 0;
+  for (const char *p = expr; *p; p++) {
+    if (*p == '(')
+      depth++;
+    else if (*p == ')') {
+      if (depth > 0)
+        depth--;
+    } else if (*p == '=' && depth == 0) {
+      eq_sign = p;
+      break;
+    }
+  }
 
   if (eq_sign) {
-    // ASSIGNMENT
+    // Potential ASSIGNMENT (x = ...) or top-level equality (1 = 1).
     int len = eq_sign - expr;
 
     // Check LHS for validity as a simple variable assignment
     char lhs_clean[BUFFER_SIZE];
     int k = 0, j = 0;
     int valid_assignment = 1;
+    int lhs_empty = 1;
     while (j < len && isspace((unsigned char)expr[j]))
       j++;
-    if (j < len && IS_VAR_START(expr[j])) {
-      while (j < len && IS_VAR_CHAR(expr[j]) && k < VAR_NAME_LEN - 1)
-        lhs_clean[k++] = expr[j++];
-      lhs_clean[k] = '\0';
-      while (j < len && isspace((unsigned char)expr[j]))
-        j++;
-      if (j != len)
+    if (j < len) {
+      lhs_empty = 0;
+      if (IS_VAR_START(expr[j])) {
+        while (j < len && IS_VAR_CHAR(expr[j]) && k < VAR_NAME_LEN - 1)
+          lhs_clean[k++] = expr[j++];
+        lhs_clean[k] = '\0';
+        while (j < len && isspace((unsigned char)expr[j]))
+          j++;
+        if (j != len)
+          valid_assignment = 0;
+      } else {
         valid_assignment = 0;
+      }
     } else {
       valid_assignment = 0;
     }
@@ -428,13 +451,14 @@ CalcResult evaluate_expression(const char *expr) {
         set_variable(lhs_clean, rhs.result);
       }
       return rhs;
-    } else {
-      // Invalid assignment syntax for now
+    } else if (lhs_empty) {
+      // Degenerate "= ..." with no LHS: keep historical error 5.
       CalcResult err = {0, 5};
       return err;
     }
-  } else {
-    // CALCULATION MODE
-    return solve_math(expr);
+    // Else: not a valid assignment target -> fall through to solve_math,
+    // which treats '=' as an equality test (1 = 1 -> 1, 1 = 2 -> 0).
   }
+  // CALCULATION MODE
+  return solve_math(expr);
 }
