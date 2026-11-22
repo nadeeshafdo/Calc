@@ -1,6 +1,7 @@
 CC = x86_64-w64-mingw32-gcc
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown")
-CFLAGS = -Wall -Wextra -std=c11 -D_WIN32 -DVERSION=\"$(GIT_VERSION)\"
+BUILD_YEAR := $(shell date +%Y 2>/dev/null || echo "2026")
+CFLAGS = -Wall -Wextra -std=c11 -D_WIN32 -DVERSION=\"$(GIT_VERSION)\" -DBUILD_YEAR=$(BUILD_YEAR)
 BUILD_DIR = build-win
 SRC_DIR = src
 

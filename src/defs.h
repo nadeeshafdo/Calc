@@ -12,6 +12,15 @@
     #define VERSION "v1.0.0-dev"
 #endif
 
+// Burned in at build time like VERSION (see Makefile/CMakeLists.txt).
+// Numeric year (e.g. 2026); stringified via BUILD_YEAR_STR for printing.
+#ifndef BUILD_YEAR
+    #define BUILD_YEAR 2026
+#endif
+#define BUILD_YEAR_TOSTR_(x) #x
+#define BUILD_YEAR_TOSTR(x) BUILD_YEAR_TOSTR_(x)
+#define BUILD_YEAR_STR BUILD_YEAR_TOSTR(BUILD_YEAR)
+
 #define HISTORY_MAX 50
 #define BUFFER_SIZE 256
 #define MAX_VARS 50

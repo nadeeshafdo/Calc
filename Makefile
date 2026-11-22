@@ -11,8 +11,9 @@ INC_FLAGS := $(addprefix -I,$(INC_DIRS))
 
 CC = gcc
 GIT_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "unknown")
+BUILD_YEAR := $(shell date +%Y 2>/dev/null || echo "2026")
 CPPFLAGS := $(INC_FLAGS) -MMD
-CFLAGS = -Wall -Wextra -std=c11 -DVERSION=\"$(GIT_VERSION)\"
+CFLAGS = -Wall -Wextra -std=c11 -DVERSION=\"$(GIT_VERSION)\" -DBUILD_YEAR=$(BUILD_YEAR)
 LDLIBS = -lm
 
 # Default target
