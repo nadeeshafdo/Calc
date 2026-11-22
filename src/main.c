@@ -8,6 +8,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+int looks_like_funcdef(const char *token) {
+  const char *paren_open = strchr(token, '(');
+  const char *paren_close = strchr(token, ')');
+  const char *eq_sign = strchr(token, '=');
+  if (!(paren_open && paren_close && eq_sign && paren_open < paren_close &&
+        paren_close < eq_sign))
+    return 0;
+  // Only a function definition when the text before '(' looks like a
+  // bare name (non-empty, all var chars). Otherwise it's an expression,
+  // e.g. (2+2)=(8-4) -> 1.
+  int has_namechar = 0;
+  for (const char *q = token; q < paren_open; q++) {
+    if (isspace((unsigned char)*q))
+      continue;
+    has_namechar = 1;
+    if (!IS_VAR_CHAR(*q))
+      return 0;
+  }
+  return has_namechar;
+}
+
 int main() {
   char input[BUFFER_SIZE];
 
@@ -89,15 +110,12 @@ int main() {
         plot_function(content);
       } else {
         // Check for Function Definition: f(x) = expr
-        // Scan for ( and ) and =
-        char *paren_open = strchr(token, '(');
-        char *paren_close = strchr(token, ')');
-        char *eq_sign = strchr(token, '=');
-
-        if (paren_open && paren_close && eq_sign && paren_open < paren_close &&
-            paren_close < eq_sign) {
+        if (looks_like_funcdef(token)) {
           // Potential function def
           // Verify LHS is name(param)
+          char *paren_open = strchr(token, '(');
+          char *paren_close = strchr(token, ')');
+          char *eq_sign = strchr(token, '=');
           char name[VAR_NAME_LEN];
           char param[VAR_NAME_LEN];
 
