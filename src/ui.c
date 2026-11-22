@@ -315,8 +315,8 @@ void plot_function(const char *func_ref) {
   // Strip (x) if present
   int len = strlen(func_ref);
   int k = 0;
-  for (int i = 0; i < len; i++) {
-    if (isalnum(func_ref[i]))
+  for (int i = 0; i < len && k < VAR_NAME_LEN - 1; i++) {
+    if (IS_VAR_CHAR(func_ref[i]))
       name[k++] = func_ref[i];
     else
       break;
@@ -325,7 +325,7 @@ void plot_function(const char *func_ref) {
 
   char param[VAR_NAME_LEN];
 
-  if (is_user_function_defined(name)) {
+  if (k > 0 && is_user_function_defined(name)) {
     // Use the function's expression
     get_function_expr(name, param, expr);
     printf(COLOR_CYAN "Plotting function %s(%s) = %s\n" COLOR_RESET, name,
@@ -341,15 +341,102 @@ void plot_function(const char *func_ref) {
   // Plotting Config
   double min_x = -10;
   double max_x = 10;
-  double min_y = -10;
-  double max_y = 10;
+  double min_y;
+  double max_y;
   int width = 60;
   int height = 20;
+  // Tie sample buffer to BUFFER_SIZE so future width bumps can't overflow.
+  // Width must stay within the buffer.
+  if (width > BUFFER_SIZE)
+    width = BUFFER_SIZE;
 
   double old_val_param;
   int had_param = get_variable(param, &old_val_param);
   // If param is not 'x', we might need to save 'x' too if we standardized on
   // it, but here we just use 'param' variable for evaluation.
+
+  // First pass: sample all columns to auto-scale Y to the data.
+  // Fixed [-10,10] collapses e.g. sin(x) in [-1,1] into 1-2 rows.
+  double y_vals[BUFFER_SIZE];
+  double data_min = 0, data_max = 0;
+  int valid_count = 0;
+  double x_step = (max_x - min_x) / (width - 1);
+
+  for (int col = 0; col < width; col++) {
+    double x = min_x + (col * (max_x - min_x) / (width - 1));
+    set_variable(param, x);
+    CalcResult res = evaluate_expression(expr);
+    if (res.error == 0 && isfinite(res.result)) {
+      y_vals[col] = res.result;
+      if (valid_count == 0) {
+        data_min = res.result;
+        data_max = res.result;
+      } else {
+        if (res.result < data_min)
+          data_min = res.result;
+        if (res.result > data_max)
+          data_max = res.result;
+      }
+      valid_count++;
+    } else {
+      y_vals[col] = NAN;
+    }
+  }
+
+  if (valid_count == 0) {
+    printf(COLOR_RED "Nothing to plot (no valid points).\n" COLOR_RESET);
+    if (had_param)
+      set_variable(param, old_val_param);
+    else
+      unset_variable(param);
+    return;
+  }
+
+  if (data_min == data_max) {
+    // Constant function: give it room above/below.
+    min_y = data_min - 1.0;
+    max_y = data_max + 1.0;
+  } else {
+    double pad = (data_max - data_min) * 0.1;
+    if (pad == 0)
+      pad = 1.0;
+    min_y = data_min - pad;
+    max_y = data_max + pad;
+  }
+
+  double y_step = (max_y - min_y) / (height - 1);
+
+  // Locate axes (closest column/row to zero).
+  int zero_col = -1;
+  double best_x = 0;
+  for (int col = 0; col < width; col++) {
+    double x = min_x + (col * (max_x - min_x) / (width - 1));
+    if (col == 0 || fabs(x) < best_x) {
+      best_x = fabs(x);
+      zero_col = col;
+    }
+  }
+  // Only draw an axis if zero is actually within the range.
+  if (min_x > 0 || max_x < 0)
+    zero_col = -1;
+  // Require the axis column to be close to zero (half a step).
+  if (zero_col >= 0) {
+    double zx = min_x + (zero_col * (max_x - min_x) / (width - 1));
+    if (fabs(zx) > x_step / 2.0 + 1e-12)
+      zero_col = -1;
+  }
+
+  int zero_row = -1;
+  if (min_y <= 0 && max_y >= 0) {
+    double best_y = 0;
+    for (int row = 0; row < height; row++) {
+      double y = max_y - (row * (max_y - min_y) / (height - 1));
+      if (row == 0 || fabs(y) < best_y) {
+        best_y = fabs(y);
+        zero_row = row;
+      }
+    }
+  }
 
   for (int row = 0; row < height; row++) {
     // y goes from max_y to min_y
@@ -358,30 +445,36 @@ void plot_function(const char *func_ref) {
     for (int col = 0; col < width; col++) {
       double x = min_x + (col * (max_x - min_x) / (width - 1));
 
-      // Evaluate
-      set_variable(param, x);
-      CalcResult res = evaluate_expression(expr);
+      double val = y_vals[col];
+      int has_val = isfinite(val);
 
-      // Check if y is close to res.result
-      if (res.error == 0) {
-        double val = res.result;
-        double y_step = (max_y - min_y) / (height - 1);
+      // Check if y is close to val
+      if (has_val) {
         if (fabs(val - y) < y_step / 2.0) {
           printf("*");
-        } else if (fabs(x) < 0.1 && fabs(y) < 0.1) {
+        } else if (col == zero_col && row == zero_row) {
           printf("+"); // Origin
-        } else if (fabs(x) < 0.1) {
+        } else if (col == zero_col) {
           printf("|"); // Y-axis
-        } else if (fabs(y) < 0.1) {
+        } else if (row == zero_row) {
           printf("-"); // X-axis
         } else {
           printf(" ");
         }
       } else {
-        // If error (e.g. sqrt(-1)), just print space or specific char?
-        // printf("?");
-        printf(" ");
+        // Gap (e.g. sqrt(-1), division by zero): draw axis underneath if any.
+        if (col == zero_col && row == zero_row) {
+          printf("+");
+        } else if (col == zero_col) {
+          printf("|");
+        } else if (row == zero_row) {
+          printf("-");
+        } else {
+          printf(" ");
+        }
       }
+      (void)x;
+      (void)y;
     }
     printf("\n");
   }

@@ -1,6 +1,12 @@
 #ifndef DEFS_H
 #define DEFS_H
 
+#include <ctype.h>
+
+// --- Variable name helpers: [A-Za-z_][A-Za-z0-9_]* ---
+#define IS_VAR_START(c) (isalpha((unsigned char)(c)) || (c) == '_')
+#define IS_VAR_CHAR(c) (isalnum((unsigned char)(c)) || (c) == '_')
+
 // --- Constants ---
 #ifndef VERSION
     #define VERSION "v1.0.0-dev"

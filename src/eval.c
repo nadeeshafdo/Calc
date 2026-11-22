@@ -61,12 +61,19 @@ double apply_op(double a, double b, char op, int *error) {
 }
 
 // Pre-processor to handle Implicit Multiplication
-void normalize_expression(char *out, const char *in) {
+// Returns 0 on success, 1 if output was truncated (fail closed).
+int normalize_expression(char *out, const char *in, size_t out_size) {
+  if (out_size == 0)
+    return 1;
   int j = 0;
   for (int i = 0; in[i]; i++) {
     if (isspace((unsigned char)in[i]))
       continue; // Strip spaces
 
+    if (j + 1 >= (int)out_size) {
+      out[out_size - 1] = '\0';
+      return 1;
+    }
     out[j++] = in[i];
 
     char curr = in[i];
@@ -79,71 +86,96 @@ void normalize_expression(char *out, const char *in) {
     if (next == 0)
       break;
 
-    // Rule 1: ) followed by ( or number or letter -> Insert *
-    if (curr == ')' && (next == '(' || isalnum((unsigned char)next))) {
-      out[j++] = '*';
+    int need_star = 0;
+    // Rule 1: ) followed by ( or number or letter/_ -> Insert *
+    if (curr == ')' && (next == '(' || IS_VAR_CHAR(next))) {
+      need_star = 1;
     }
-    // Rule 2: number followed by ( or letter -> Insert *
+    // Rule 2: number followed by ( or letter/_ -> Insert *
+    // Exempt when the digit is part of an identifier (e.g. f1(x) or a2x):
+    // if previous char is a var char, this digit continues a name.
     else if (isdigit((unsigned char)curr) &&
-             (next == '(' || isalpha((unsigned char)next))) {
-      out[j++] = '*';
+             (next == '(' || IS_VAR_START(next))) {
+      if (!(i > 0 && IS_VAR_CHAR(in[i - 1]))) {
+        need_star = 1;
+      }
     }
-    // Rule 2b: % (postfix percent) followed by number/letter/(/. -> Insert *
+    // Rule 2b: % (postfix percent) followed by number/letter/_/(/. -> Insert *
     // e.g. "500%25" -> "500%*25" so (500%) * 25 = 125
     else if (curr == '%' &&
-             (next == '(' || isalnum((unsigned char)next) || next == '.')) {
-      out[j++] = '*';
+             (next == '(' || IS_VAR_CHAR(next) || next == '.')) {
+      need_star = 1;
     }
-    // Rule 3: letter followed by ( -> Insert * UNLESS it's a function
-    else if (isalpha(curr) && next == '(') {
+    // Rule 3: letter/_ followed by ( -> Insert * UNLESS it's a function
+    else if (IS_VAR_CHAR(curr) && next == '(') {
       // Check if the current word is a function name
       int k = 0;
-      char word[32];
+      int too_long = 0;
+      char word[VAR_NAME_LEN];
       // Backtrack to find the start of the word
       int start = i;
-      while (start > 0 && isalpha(in[start - 1]))
+      while (start > 0 && IS_VAR_CHAR(in[start - 1]))
         start--;
 
       // Copy the word
       for (int m = start; m <= i; m++) { // Include current char
-        if (k < 31)
+        if (k < VAR_NAME_LEN - 1)
           word[k++] = in[m];
+        else
+          too_long = 1;
       }
       word[k] = '\0';
 
-      word[k] = '\0';
-
-      if (!is_function_name(word) && !is_user_function_defined(word)) {
-        out[j++] = '*';
+      if (too_long) {
+        // Definitely not a known function (names are bounded); treat as var.
+        need_star = 1;
+      } else if (!is_function_name(word) && !is_user_function_defined(word)) {
+        need_star = 1;
       }
+    }
+    if (need_star) {
+      if (j + 1 >= (int)out_size) {
+        out[out_size - 1] = '\0';
+        return 1;
+      }
+      out[j++] = '*';
     }
   }
   out[j] = '\0';
+  return 0;
 }
 
 CalcResult solve_math(const char *raw_expr) {
   // 1. Normalize (handle implicit multiplication)
   char expr[BUFFER_SIZE * 2]; // Double size to accommodate inserted *
-  normalize_expression(expr, raw_expr);
+  CalcResult res = {0, 0};
+  if (normalize_expression(expr, raw_expr, sizeof(expr))) {
+    res.error = 3;
+    return res;
+  }
 
   DoubleStack values = {.top = -1};
   CharStack ops = {.top = -1};
-  CalcResult res = {0, 0};
   int i = 0;
   int can_be_unary = 1;
 
   while (expr[i]) {
-    if (isdigit(expr[i]) || expr[i] == '.') {
+    if (isdigit((unsigned char)expr[i]) || expr[i] == '.') {
       char *end_ptr;
       double val = strtod(&expr[i], &end_ptr);
       d_push(&values, val);
       i = end_ptr - expr;
       can_be_unary = 0;
-    } else if (isalpha(expr[i])) {
+    } else if (IS_VAR_START(expr[i])) {
       char var_name[VAR_NAME_LEN];
       int k = 0;
-      while (isalnum(expr[i]) && k < VAR_NAME_LEN - 1) {
+      while (IS_VAR_CHAR(expr[i]) && k < VAR_NAME_LEN - 1) {
         var_name[k++] = expr[i++];
+      }
+      // Fail closed on over-long identifiers instead of silent split/alias.
+      if (IS_VAR_CHAR(expr[i])) {
+        res.error = 3;
+        return res;
       }
       var_name[k] = '\0';
 
@@ -228,15 +260,16 @@ CalcResult solve_math(const char *raw_expr) {
               int had_var = get_variable(param, &old_val);
               set_variable(param, val);
               CalcResult user_res = solve_math(functions[idx].expr);
+              // Always restore shadowed param, even on error (no leak).
+              if (had_var)
+                set_variable(param, old_val);
+              else
+                unset_variable(param);
               if (user_res.error) {
                 res.error = user_res.error;
                 return res;
               }
               result = user_res.result;
-              if (had_var)
-                set_variable(param, old_val);
-              else
-                unset_variable(param);
             }
           }
           d_push(&values, result);
@@ -305,19 +338,30 @@ CalcResult solve_math(const char *raw_expr) {
 int get_unknown_variables(const char *expr, int max_vars,
                           char var_names[][VAR_NAME_LEN]) {
   char clean_expr[BUFFER_SIZE * 2];
-  normalize_expression(clean_expr, expr);
+  if (normalize_expression(clean_expr, expr, sizeof(clean_expr))) {
+    return 0; // truncated input: fail closed, report none
+  }
 
   int i = 0;
   int count = 0;
 
   while (clean_expr[i]) {
-    if (isalpha(clean_expr[i])) {
+    if (IS_VAR_START(clean_expr[i])) {
       char name[VAR_NAME_LEN];
       int k = 0;
-      while (isalnum(clean_expr[i]) && k < VAR_NAME_LEN - 1) {
-        name[k++] = clean_expr[i++];
+      int too_long = 0;
+      while (IS_VAR_CHAR(clean_expr[i])) {
+        if (k < VAR_NAME_LEN - 1)
+          name[k++] = clean_expr[i];
+        else
+          too_long = 1;
+        i++;
       }
       name[k] = '\0';
+      if (too_long) {
+        // Skip over-long identifiers instead of splitting/aliasing.
+        continue;
+      }
 
       // Ignore functions
       if (!is_function_name(name)) {
@@ -363,13 +407,13 @@ CalcResult evaluate_expression(const char *expr) {
     char lhs_clean[BUFFER_SIZE];
     int k = 0, j = 0;
     int valid_assignment = 1;
-    while (j < len && isspace(expr[j]))
+    while (j < len && isspace((unsigned char)expr[j]))
       j++;
-    if (j < len && isalpha(expr[j])) {
-      while (j < len && isalnum(expr[j]) && k < VAR_NAME_LEN - 1)
+    if (j < len && IS_VAR_START(expr[j])) {
+      while (j < len && IS_VAR_CHAR(expr[j]) && k < VAR_NAME_LEN - 1)
         lhs_clean[k++] = expr[j++];
       lhs_clean[k] = '\0';
-      while (j < len && isspace(expr[j]))
+      while (j < len && isspace((unsigned char)expr[j]))
         j++;
       if (j != len)
         valid_assignment = 0;

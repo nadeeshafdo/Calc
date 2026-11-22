@@ -25,10 +25,10 @@ int main() {
     char *token = strtok(input, ";");
     while (token != NULL) {
       // Trim whitespace
-      while (isspace(*token))
+      while (isspace((unsigned char)*token))
         token++;
       char *end = token + strlen(token) - 1;
-      while (end > token && isspace(*end))
+      while (end > token && isspace((unsigned char)*end))
         end--;
       *(end + 1) = '\0';
 
@@ -49,10 +49,11 @@ int main() {
         // ... same logic but on 'token' ...
         char var_name[BUFFER_SIZE];
         int i = 6;
-        while (token[i] && isspace(token[i]))
+        while (token[i] && isspace((unsigned char)token[i]))
           i++;
         int k = 0;
-        while (token[i] && !isspace(token[i]) && k < BUFFER_SIZE - 1) {
+        while (token[i] && !isspace((unsigned char)token[i]) &&
+               k < BUFFER_SIZE - 1) {
           var_name[k++] = token[i++];
         }
         var_name[k] = '\0';
@@ -75,15 +76,14 @@ int main() {
         int i = 5;
         int k = 0;
         int depth = 1;
-        while (token[i] && depth > 0) {
+        while (token[i] && depth > 0 && k < BUFFER_SIZE - 1) {
           if (token[i] == '(')
             depth++;
           if (token[i] == ')')
             depth--;
           if (depth > 0)
-            content[k++] = token[i++];
-          else
-            i++; // skip final ')'
+            content[k++] = token[i];
+          i++;
         }
         content[k] = '\0';
         plot_function(content);
@@ -102,35 +102,56 @@ int main() {
           char param[VAR_NAME_LEN];
 
           int valid = 1;
-          // Name
+          // Name: [A-Za-z_][A-Za-z0-9_]*, bounded
           int n = 0;
           char *p = token;
           while (p < paren_open) {
-            if (!isspace(*p))
-              name[n++] = *p;
-            p++;
-          }
-          name[n] = '\0';
-          if (n == 0)
-            valid = 0;
-
-          // Param
-          int m = 0;
-          p = paren_open + 1;
-          while (p < paren_close) {
-            if (!isspace(*p)) {
-              if (!isalnum(*p))
-                valid = 0; // Only alphanumeric
-              param[m++] = *p;
+            if (!isspace((unsigned char)*p)) {
+              if (n < VAR_NAME_LEN - 1)
+                name[n++] = *p;
+              else
+                valid = 0; // too long, fail closed
             }
             p++;
           }
-          param[m] = '\0';
+          if (n < VAR_NAME_LEN)
+            name[n] = '\0';
+          else
+            name[VAR_NAME_LEN - 1] = '\0';
+          if (n == 0)
+            valid = 0;
+          else {
+            if (!IS_VAR_START(name[0]))
+              valid = 0;
+            for (int ti = 1; ti < n && valid; ti++) {
+              if (!IS_VAR_CHAR(name[ti]))
+                valid = 0;
+            }
+          }
+
+          // Param: single variable name, bounded
+          int m = 0;
+          p = paren_open + 1;
+          while (p < paren_close) {
+            if (!isspace((unsigned char)*p)) {
+              if (!IS_VAR_CHAR(*p))
+                valid = 0; // Only alphanumeric + underscore
+              if (m < VAR_NAME_LEN - 1)
+                param[m++] = *p;
+              else
+                valid = 0; // too long
+            }
+            p++;
+          }
+          if (m < VAR_NAME_LEN)
+            param[m] = '\0';
+          else
+            param[VAR_NAME_LEN - 1] = '\0';
           if (m == 0)
             valid = 0;
 
           // Check if param starts with digit (invalid var)
-          if (isdigit(param[0]))
+          if (m > 0 && !IS_VAR_START(param[0]))
             valid = 0;
 
           if (valid) {
@@ -154,8 +175,9 @@ int main() {
           else if (res.error == 4)
             printf(COLOR_RED "Error: Unknown variable.\n" COLOR_RESET);
           else if (res.error == 5)
-            printf(COLOR_RED "Error: Invalid assignment (Var must be "
-                             "letters).\n" COLOR_RESET);
+            printf(COLOR_RED "Error: Invalid assignment (Var must start with "
+                             "a letter or underscore, followed by letters, "
+                             "digits, or underscores).\n" COLOR_RESET);
           else if (res.error == 6)
             printf(COLOR_RED
                    "Error: Invalid Argument (e.g. sqrt(-1)).\n" COLOR_RESET);
